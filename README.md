@@ -1,36 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ByteRank
 
-## Getting Started
+ByteRank is a social platform for developers to track coding consistency, compete with friends, and climb the ranks. The application allows users to create and join teams, track their daily coding streaks, and engage with a community of like-minded developers.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Team Management**: Create and join coding teams
+- **Ranking System**: Compete with other teams and climb the leaderboard
+- **Friend System**: Connect with other developers
+- **Activity Tracking**: Monitor your coding consistency
+- **GitHub Authentication**: Secure login via GitHub
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This project is built with [Next.js](https://nextjs.org) and uses [Supabase](https://supabase.com) for authentication and database management.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Learn More
 
-To learn more about Next.js, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Technologies
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Frontend**: Next.js 14 with App Router, React, TypeScript
+- **Styling**: TailwindCSS
+- **Authentication**: Supabase Auth with GitHub OAuth
+- **Database**: Supabase
+- **Deployment**: Vercel
 
-## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

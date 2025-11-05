@@ -1,28 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from "../../components/ThemeProvider";
+import { useAuth } from "../../context/AuthContext";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import PageLayout from "../../components/PageLayout";
 import Card from "../../components/Card";
 
-// Mock data for demonstration
-const mockTeams = [
-  { id: "alpha", name: "ByteBuilders", logo: "🚀", rank: 3, members: 12 },
-  { id: "bravo", name: "CodeCrafters", logo: "⚙️", rank: 1, members: 8 },
-  { id: "charlie", name: "DevDynamos", logo: "💻", rank: 2, members: 15 },
-  { id: "delta", name: "TechTitans", logo: "⚡", rank: 4, members: 10 },
-];
-
-const mockUsers = [
-  { id: "user1", name: "Alex Johnson", avatar: "AJ", streak: 12, isFriend: false },
-  { id: "user2", name: "Sam Taylor", avatar: "ST", streak: 25, isFriend: true },
-  { id: "user3", name: "Jordan Lee", avatar: "JL", streak: 8, isFriend: false },
-  { id: "user4", name: "Casey Morgan", avatar: "CM", streak: 31, isFriend: true },
-];
+type Team = {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  member_count: number;
+  user_role?: string;
+  user_rank?: number;
+  is_member?: boolean;
+};
 
 export default function CommunityPage() {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const supabase = createClientComponentClient();
+  
+  // State for teams data
+  const [myTeams, setMyTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // State for search functionality
   const [searchType, setSearchType] = useState<"teams" | "people">("teams");
@@ -30,29 +33,147 @@ export default function CommunityPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
+  // Fetch user's teams
+  useEffect(() => {
+    async function fetchMyTeams() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        // Get teams where user is a member
+        const { data: memberData, error: memberError } = await supabase
+          .from('group_members')
+          .select(`
+            group_id,
+            role,
+            total_commits,
+            groups (
+              id,
+              name,
+              avatar_url
+            )
+          `)
+          .eq('user_id', user.id);
+        
+        if (memberError) {
+          console.error('Error fetching teams:', memberError);
+          return;
+        }
+        
+        if (!memberData) return;
+        
+        // For each team, get member count and user's rank
+        const teamsWithDetails = await Promise.all(
+          memberData.map(async (membership: any) => {
+            const groupId = membership.group_id;
+            
+            // Get member count
+            const { count } = await supabase
+              .from('group_members')
+              .select('*', { count: 'exact', head: true })
+              .eq('group_id', groupId);
+            
+            // Get all members' commits to calculate rank
+            const { data: members } = await supabase
+              .from('group_members')
+              .select('user_id, total_commits')
+              .eq('group_id', groupId)
+              .order('total_commits', { ascending: false });
+            
+            // Calculate user's rank
+            const userRank = members?.findIndex(m => m.user_id === user.id) ?? -1;
+            
+            return {
+              id: membership.groups.id,
+              name: membership.groups.name,
+              avatar_url: membership.groups.avatar_url,
+              member_count: count || 0,
+              user_role: membership.role,
+              user_rank: userRank + 1, // Convert to 1-indexed
+            };
+          })
+        );
+        
+        setMyTeams(teamsWithDetails);
+      } catch (error) {
+        console.error('Unexpected error fetching teams:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchMyTeams();
+  }, [user]);
+  
   // Handle search
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setIsSearching(true);
     
-    // Simulate search with mock data
-    setTimeout(() => {
+    try {
       if (searchType === "teams") {
-        setSearchResults(
-          mockTeams.filter(team => 
-            team.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
+        // Search for teams by name
+        const { data: teamsData, error } = await supabase
+          .from('groups')
+          .select('id, name, avatar_url')
+          .ilike('name', `%${searchQuery}%`)
+          .limit(10);
+        
+        if (error) {
+          console.error('Error searching teams:', error);
+          return;
+        }
+        
+        // For each team, get member count and check if user is member
+        const teamsWithDetails = await Promise.all(
+          (teamsData || []).map(async (team) => {
+            const { count } = await supabase
+              .from('group_members')
+              .select('*', { count: 'exact', head: true })
+              .eq('group_id', team.id);
+            
+            // Check if user is already a member
+            const { data: memberCheck } = await supabase
+              .from('group_members')
+              .select('user_id')
+              .eq('group_id', team.id)
+              .eq('user_id', user?.id || '')
+              .single();
+            
+            return {
+              id: team.id,
+              name: team.name,
+              avatar_url: team.avatar_url,
+              member_count: count || 0,
+              is_member: !!memberCheck,
+            };
+          })
         );
+        
+        setSearchResults(teamsWithDetails);
       } else {
-        setSearchResults(
-          mockUsers.filter(user => 
-            user.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        );
+        // People search - search profiles by username
+        const { data: peopleData, error } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url, description')
+          .ilike('username', `%${searchQuery}%`)
+          .limit(10);
+        
+        if (error) {
+          console.error('Error searching people:', error);
+          return;
+        }
+        
+        setSearchResults(peopleData || []);
       }
+    } catch (error) {
+      console.error('Unexpected error searching:', error);
+    } finally {
       setIsSearching(false);
-    }, 500);
+    }
   };
   
   // Clear search
@@ -224,9 +345,9 @@ export default function CommunityPage() {
                   flex: 1,
                   padding: "0.75rem 1rem",
                   borderRadius: "0.5rem",
-                  border: "1px solid rgba(51, 65, 85, 0.5)",
-                  background: "rgba(15, 23, 42, 0.4)",
-                  color: "white",
+                  border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.5)" : "1px solid rgba(203, 213, 225, 0.5)",
+                  background: theme === 'dark' ? "rgba(15, 23, 42, 0.4)" : "rgba(248, 250, 252, 0.8)",
+                  color: theme === 'dark' ? "white" : "hsl(220, 25%, 10%)",
                   fontSize: "0.875rem",
                 }}
               />
@@ -292,124 +413,145 @@ export default function CommunityPage() {
                       ...teamItemStyle,
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          borderRadius: "0.375rem",
-                          background: theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(226, 232, 240, 0.8)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "1.25rem",
-                        }}>
-                          {team.logo}
-                        </div>
+                        {team.avatar_url ? (
+                          <img 
+                            src={team.avatar_url} 
+                            alt={team.name}
+                            style={{
+                              width: "2.5rem",
+                              height: "2.5rem",
+                              borderRadius: "0.375rem",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: "2.5rem",
+                            height: "2.5rem",
+                            borderRadius: "0.375rem",
+                            background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "white",
+                            fontWeight: 600,
+                            fontSize: "0.875rem",
+                          }}>
+                            {team.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
                           <h4 style={{ fontWeight: 600, color: headingColor, fontSize: "0.9375rem" }}>{team.name}</h4>
-                          <div style={{ 
-                            display: "flex", 
-                            alignItems: "center", 
-                            gap: "0.75rem",
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.375rem",
+                            backgroundColor: "rgba(51, 65, 85, 0.15)",
+                            color: labelColor,
+                            padding: "0.25rem 0.5rem",
+                            borderRadius: "0.375rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 500,
                           }}>
-                            {team.rank && (
-                              <div style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "0.375rem",
-                                backgroundColor: team.rank === 1 ? "rgba(234, 179, 8, 0.15)" : 
-                                                team.rank === 2 ? (theme === 'dark' ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.3)") : 
-                                                team.rank === 3 ? "rgba(194, 65, 12, 0.15)" : 
-                                                "rgba(51, 65, 85, 0.15)",
-                                color: team.rank === 1 ? "#fbbf24" : 
-                                       team.rank === 2 ? (theme === 'dark' ? "#e2e8f0" : "#64748b") : 
-                                       team.rank === 3 ? "#fb923c" : 
-                                       "#94a3b8",
-                                padding: "0.25rem 0.5rem",
-                                borderRadius: "0.375rem",
-                                fontSize: "0.75rem",
-                                fontWeight: 600,
-                              }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
-                                </svg>
-                                <span>Rank #{team.rank}</span>
-                              </div>
-                            )}
-                            <div style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.375rem",
-                              backgroundColor: "rgba(51, 65, 85, 0.15)",
-                              color: "#94a3b8",
-                              padding: "0.25rem 0.5rem",
-                              borderRadius: "0.375rem",
-                              fontSize: "0.75rem",
-                              fontWeight: 500,
-                            }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="9" cy="7" r="4"></circle>
-                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                              </svg>
-                              <span>{team.members} members</span>
-                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                              <circle cx="9" cy="7" r="4"></circle>
+                              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <span>{team.member_count} members</span>
                           </div>
                         </div>
                       </div>
-                      <button style={primaryButtonStyle}>
-                        Request to Join
-                      </button>
+                      {team.is_member ? (
+                        <Link 
+                          href={`/teams/${team.id}`}
+                          style={{
+                            ...buttonStyle,
+                            textDecoration: "none",
+                          }}
+                        >
+                          View Team
+                        </Link>
+                      ) : (
+                        <button style={primaryButtonStyle}>
+                          Request to Join
+                        </button>
+                      )}
                     </div>
                   ))
                 ) : (
                   // People search results
-                  searchResults.map((user) => (
-                    <div key={user.id} style={{
+                  searchResults.map((person) => (
+                    <div key={person.id} style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                       padding: "0.75rem",
                       ...teamItemStyle,
                     }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          borderRadius: "50%",
-                          background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "white",
-                          fontWeight: 600,
-                        }}>
-                          {user.avatar}
-                        </div>
-                        <div>
-                          <h4 style={{ fontWeight: 600, color: headingColor }}>{user.name}</h4>
-                          <p style={{ fontSize: "0.75rem", color: labelColor }}>{user.streak} day streak</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: 1 }}>
+                        {person.avatar_url ? (
+                          <img 
+                            src={person.avatar_url} 
+                            alt={person.username}
+                            style={{
+                              width: "2.5rem",
+                              height: "2.5rem",
+                              borderRadius: "50%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: "2.5rem",
+                            height: "2.5rem",
+                            borderRadius: "50%",
+                            background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "white",
+                            fontWeight: 600,
+                            fontSize: "0.875rem",
+                          }}>
+                            {person.username.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ fontWeight: 600, color: headingColor, fontSize: "0.9375rem" }}>{person.username}</h4>
+                          {person.description && (
+                            <p style={{ 
+                              fontSize: "0.75rem", 
+                              color: labelColor,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}>
+                              {person.description}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      {user.isFriend ? (
+                      {person.id === user?.id ? (
                         <div style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.25rem",
                           color: labelColor,
                           fontSize: "0.875rem",
+                          padding: "0.5rem 1rem",
+                          fontStyle: "italic",
                         }}>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <polyline points="16 11 18 13 22 9"></polyline>
-                          </svg>
-                          Friends
+                          You
                         </div>
                       ) : (
-                        <button style={primaryButtonStyle}>
-                          Send Friend Request
-                        </button>
+                        <Link
+                          href={`/profile/${person.id}`}
+                          style={{
+                            ...buttonStyle,
+                            textDecoration: "none",
+                          }}
+                        >
+                          View Profile
+                        </Link>
                       )}
                     </div>
                   ))
@@ -461,44 +603,74 @@ export default function CommunityPage() {
             
             {/* Teams List */}
             <Card padding="small">
-              {mockTeams.map((team, index) => (
+              {loading ? (
+                <div style={{ padding: "2rem", textAlign: "center", color: labelColor }}>
+                  Loading teams...
+                </div>
+              ) : myTeams.length === 0 ? (
+                <div style={{ padding: "2rem", textAlign: "center", color: labelColor }}>
+                  You haven't joined any teams yet. Create one or search to join!
+                </div>
+              ) : (
+                myTeams.map((team, index) => (
                 <div key={team.id} style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   padding: "1rem 1.5rem",
-                  borderBottom: index < mockTeams.length - 1 ? 
+                  borderBottom: index < myTeams.length - 1 ? 
                     (theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.5)" : "1px solid rgba(203, 213, 225, 0.5)") : 
                     "none",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: 1 }}>
-                    <div style={{
-                      width: "3rem",
-                      height: "3rem",
-                      borderRadius: "0.75rem",
-                      background: theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(226, 232, 240, 0.8)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "1.5rem",
-                      flexShrink: 0
-                    }}>
-                      {team.logo}
+                    {team.avatar_url ? (
+                      <img 
+                        src={team.avatar_url} 
+                        alt={team.name}
+                        style={{
+                          width: "3rem",
+                          height: "3rem",
+                          borderRadius: "0.75rem",
+                          objectFit: "cover",
+                          flexShrink: 0
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: "3rem",
+                        height: "3rem",
+                        borderRadius: "0.75rem",
+                        background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        fontWeight: 600,
+                        fontSize: "1rem",
+                        flexShrink: 0
+                      }}>
+                        {team.name.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginRight: "auto" }}>
+                      <h3 style={{ fontWeight: 600, color: headingColor, fontSize: "1.125rem" }}>
+                        {team.name}
+                      </h3>
+                      <span style={{ fontSize: "0.75rem", color: labelColor, textTransform: "capitalize" }}>
+                        {team.user_role}
+                      </span>
                     </div>
-                    <h3 style={{ fontWeight: 600, color: headingColor, fontSize: "1.125rem", marginRight: "auto" }}>
-                      {team.name}
-                    </h3>
                     <div style={{
                       display: "flex",
                       alignItems: "center",
                       gap: "0.375rem",
-                      backgroundColor: team.rank === 1 ? "rgba(234, 179, 8, 0.15)" : 
-                                      team.rank === 2 ? (theme === 'dark' ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.3)") : 
-                                      team.rank === 3 ? "rgba(194, 65, 12, 0.15)" : 
+                      backgroundColor: team.user_rank === 1 ? "rgba(234, 179, 8, 0.15)" : 
+                                      team.user_rank === 2 ? (theme === 'dark' ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.3)") : 
+                                      team.user_rank === 3 ? "rgba(194, 65, 12, 0.15)" : 
                                       "rgba(51, 65, 85, 0.15)",
-                      color: team.rank === 1 ? "#fbbf24" : 
-                             team.rank === 2 ? (theme === 'dark' ? "#e2e8f0" : "#64748b") : 
-                             team.rank === 3 ? "#fb923c" : 
+                      color: team.user_rank === 1 ? "#fbbf24" : 
+                             team.user_rank === 2 ? (theme === 'dark' ? "#e2e8f0" : "#64748b") : 
+                             team.user_rank === 3 ? "#fb923c" : 
                              "#94a3b8",
                       padding: "0.25rem 0.5rem",
                       borderRadius: "0.375rem",
@@ -509,7 +681,7 @@ export default function CommunityPage() {
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
                       </svg>
-                      <span>#{team.rank}</span>
+                      <span>#{team.user_rank}</span>
                     </div>
                     <div style={{
                       display: "flex",
@@ -530,7 +702,7 @@ export default function CommunityPage() {
                         <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                       </svg>
-                      <span>{team.members}</span>
+                      <span>{team.member_count}</span>
                     </div>
                   </div>
                   <Link 
@@ -546,7 +718,8 @@ export default function CommunityPage() {
                     View
                   </Link>
                 </div>
-              ))}
+                ))
+              )}
             </Card>
           </div>
         </div>

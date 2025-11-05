@@ -1,38 +1,161 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTheme } from "../../components/ThemeProvider";
+import { useAuth } from "../../context/AuthContext";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function ProfilePage() {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const supabase = createClientComponentClient();
   
-  // Mock user data - in a real app, this would come from an API or auth service
   const [userData, setUserData] = useState({
-    name: "Alex Johnson",
-    description: "Senior Software Engineer passionate about web development and open source. Currently working on ByteRank to help developers track their coding consistency.",
+    name: "",
+    description: "",
     profilePicture: "",
-    github: "https://github.com/alexjohnson",
-    linkedin: "https://linkedin.com/in/alexjohnson",
-    streak: 42,
-    contributions: 1024,
-    joined: "January 2023"
+    github: "",
+    linkedin: "",
+    streak: 0,
+    contributions: 0,
+    joined: ""
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // State for profile picture upload
   const [profilePreview, setProfilePreview] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Fetch profile data from Supabase
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        console.log('Fetch profile data:', data);
+        console.log('Fetch profile error:', error);
+        
+        if (error) {
+          console.error('Error fetching profile:', error);
+          return;
+        }
+        
+        if (data) {
+          setUserData({
+            name: data.username || '',
+            description: data.description || '',
+            profilePicture: data.avatar_url || '',
+            github: data.github_url || '',
+            linkedin: data.linkedin_url || '',
+            streak: 0,
+            contributions: data.num_contributions || 0,
+            joined: data.created_at ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''
+          });
+          
+          if (data.avatar_url) {
+            setProfilePreview(data.avatar_url);
+          }
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching profile:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchProfile();
+  }, [user]);
   
   // Handle profile picture upload
-  const handleProfileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setProfilePreview(result);
-        // In a real app, you'd upload this to a server
-        setUserData({ ...userData, profilePicture: file.name });
-      };
-      reader.readAsDataURL(file);
+    if (!file || !user) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setToast({ message: 'Please upload an image file', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setToast({ message: 'Image must be less than 5MB', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    
+    setUploading(true);
+    
+    try {
+      // Create unique filename with user folder
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+      
+      console.log('Uploading file:', filePath);
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('Avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        setToast({ message: 'Failed to upload image', type: 'error' });
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+      
+      console.log('Upload successful:', uploadData);
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('Avatars')
+        .getPublicUrl(filePath);
+      
+      console.log('Public URL:', publicUrl);
+      
+      // Update profile with new avatar URL
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+      
+      if (updateError) {
+        console.error('Error updating avatar URL:', updateError);
+        setToast({ message: 'Failed to update profile picture', type: 'error' });
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+      
+      // Update local state
+      setUserData({ ...userData, profilePicture: publicUrl });
+      setProfilePreview(publicUrl);
+      
+      setToast({ message: 'Profile picture updated!', type: 'success' });
+      setTimeout(() => setToast(null), 3000);
+      
+    } catch (error) {
+      console.error('Unexpected error uploading:', error);
+      setToast({ message: 'An unexpected error occurred', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setUploading(false);
     }
   };
   
@@ -40,6 +163,56 @@ export default function ProfilePage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setUserData({ ...userData, [name]: value });
+  };
+  
+  // Handle save changes
+  const handleSaveChanges = async () => {
+    if (!user) {
+      console.error('No user found');
+      return;
+    }
+    
+    console.log('Saving profile for user:', user.id);
+    console.log('Data to save:', {
+      username: userData.name,
+      description: userData.description,
+      avatar_url: userData.profilePicture,
+      github_url: userData.github,
+      linkedin_url: userData.linkedin,
+    });
+    
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          username: userData.name,
+          description: userData.description,
+          avatar_url: userData.profilePicture,
+          github_url: userData.github,
+          linkedin_url: userData.linkedin,
+        })
+        .eq('id', user.id)
+        .select();
+      
+      console.log('Update response data:', data);
+      console.log('Update response error:', error);
+      
+      if (error) {
+        console.error('Error updating profile:', error);
+        setToast({ message: `Failed to save: ${error.message}`, type: 'error' });
+      } else {
+        setToast({ message: 'Profile updated successfully!', type: 'success' });
+      }
+    } catch (error) {
+      console.error('Unexpected error saving profile:', error);
+      setToast({ message: 'An unexpected error occurred. Please try again.', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+    
+    // Auto-hide toast after 3 seconds
+    setTimeout(() => setToast(null), 3000);
   };
   
   // Common styles - theme aware
@@ -110,7 +283,35 @@ export default function ProfilePage() {
   // Text color styles
   const headingColor = theme === 'dark' ? "#e2e8f0" : "#1e293b";
   const labelColor = theme === 'dark' ? "#94a3b8" : "#64748b";
-  const iconColor = theme === 'dark' ? "currentColor" : "#1e40af"; // Darker blue for light mode
+  const iconColor = theme === 'dark' ? "currentColor" : "#1e40af";
+
+  if (loading) {
+    return (
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "50vh",
+        color: labelColor,
+      }}>
+        Loading profile...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "50vh",
+        color: labelColor,
+      }}>
+        Please sign in to view your profile.
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -118,7 +319,46 @@ export default function ProfilePage() {
       maxWidth: "1000px",
       margin: "0 auto",
       width: "100%",
+      position: "relative",
     }}>
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: "fixed",
+          top: "2rem",
+          right: "2rem",
+          zIndex: 1000,
+          background: toast.type === 'success' 
+            ? "linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95))"
+            : "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))",
+          color: "white",
+          padding: "1rem 1.5rem",
+          borderRadius: "0.75rem",
+          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          minWidth: "300px",
+          animation: "slideIn 0.3s ease-out",
+          border: toast.type === 'success'
+            ? "1px solid rgba(34, 197, 94, 0.3)"
+            : "1px solid rgba(239, 68, 68, 0.3)",
+        }}>
+          {toast.type === 'success' ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          )}
+          <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>{toast.message}</span>
+        </div>
+      )}
       {/* Page Header */}
       <h1 className="gradient-text" style={{
         fontSize: "2.5rem",
@@ -147,10 +387,8 @@ export default function ProfilePage() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              cursor: "pointer",
               overflow: "hidden",
               background: profilePreview ? "transparent" : "rgba(30, 41, 59, 0.4)",
-              position: "relative",
               marginBottom: "1rem",
             }}>
               {profilePreview ? (
@@ -166,38 +404,37 @@ export default function ProfilePage() {
                     <circle cx="12" cy="7" r="4"></circle>
                   </svg>
                   <span style={{ color: "#94a3b8", fontSize: "0.875rem", textAlign: "center" }}>
-                    Click to upload<br />profile picture
+                    Your profile picture
                   </span>
                 </>
               )}
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleProfileUpload} 
-                style={{ 
-                  opacity: 0, 
-                  position: "absolute", 
-                  top: 0, 
-                  left: 0, 
-                  width: "100%", 
-                  height: "100%", 
-                  cursor: "pointer" 
-                }} 
-              />
             </div>
             
-            <button style={{
-              ...buttonStyle,
-              width: "100%",
-              justifyContent: "center",
-              marginTop: "0.5rem"
-            }}>
+            <input 
+              ref={fileInputRef}
+              type="file" 
+              accept="image/*" 
+              onChange={handleProfileUpload}
+              style={{ display: "none" }}
+            />
+            
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                ...buttonStyle,
+                width: "100%",
+                justifyContent: "center",
+                marginTop: "0.5rem",
+                opacity: uploading ? 0.6 : 1,
+                cursor: uploading ? "not-allowed" : "pointer",
+              }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="17 8 12 3 7 8"></polyline>
                 <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
-              Upload New Picture
+              {uploading ? 'Uploading...' : 'Upload New Picture'}
             </button>
           </div>
           
@@ -207,20 +444,21 @@ export default function ProfilePage() {
               Your Stats
             </h2>
             
-            <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-              <div style={statItemStyle}>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fbbf24" }}>{userData.streak}</div>
-                <div style={{ fontSize: "0.75rem", color: labelColor }}>Day Streak</div>
-              </div>
-              
-              <div style={statItemStyle}>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#60a5fa" }}>{userData.contributions}</div>
-                <div style={{ fontSize: "0.75rem", color: labelColor }}>Contributions</div>
-              </div>
+            <div style={statItemStyle}>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#60a5fa" }}>{userData.contributions}</div>
+              <div style={{ fontSize: "0.75rem", color: labelColor }}>Total Contributions</div>
             </div>
             
-            <div style={{ fontSize: "0.875rem", color: labelColor, textAlign: "center" }}>
-              Member since {userData.joined}
+            <div style={{ 
+              fontSize: "0.875rem", 
+              color: labelColor, 
+              textAlign: "center",
+              marginTop: "1rem",
+              paddingTop: "1rem",
+              borderTop: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)"
+            }}>
+              <div style={{ marginBottom: "0.25rem", fontWeight: 500 }}>Member Since</div>
+              <div style={{ color: headingColor }}>{userData.joined}</div>
             </div>
           </div>
         </div>
@@ -329,16 +567,21 @@ export default function ProfilePage() {
           
           {/* Save Button */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "1rem" }}>
-            <button style={{
-              ...buttonStyle,
-              padding: "0.75rem 2rem",
-            }}>
+            <button 
+              onClick={handleSaveChanges}
+              disabled={saving}
+              style={{
+                ...buttonStyle,
+                padding: "0.75rem 2rem",
+                opacity: saving ? 0.6 : 1,
+                cursor: saving ? "not-allowed" : "pointer",
+              }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
-              Save Changes
+              {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </div>

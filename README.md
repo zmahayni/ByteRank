@@ -1,27 +1,18 @@
 # ByteRank
 
-ByteRank is a social platform for developers to track coding consistency, compete with friends, and climb the ranks. The application allows users to create and join teams, track their daily coding streaks, and engage with a community of like-minded developers.
+A platform for solo developers to compete with each other on coding consistency. Track your commits, join teams, and stay motivated by competing with others.
 
-## Features
+## About
 
-- **Team Management**: Create and join coding teams
-- **Ranking System**: Compete with other teams and climb the leaderboard
-- **Friend System**: Connect with other developers
-- **Activity Tracking**: Monitor your coding consistency
-- **GitHub Authentication**: Secure login via GitHub
+ByteRank helps developers build and maintain coding habits by gamifying consistency. Create or join teams, track your daily contributions, and see how you rank against other developers.
 
-This project is built with [Next.js](https://nextjs.org) and uses [Supabase](https://supabase.com) for authentication and database management.
-
-
-
-
+This is an early-stage project with plans to add more features and grow the community over time.
 
 ## Technologies
 
-- **Frontend**: Next.js 14 with App Router, React, TypeScript
+- **Frontend**: Next.js 15 with App Router, React, TypeScript
 - **Styling**: TailwindCSS
 - **Authentication**: Supabase Auth with GitHub OAuth
-- **Database**: Supabase
-- **Deployment**: Vercel
+- **Database**: Supabase (PostgreSQL)
 
 

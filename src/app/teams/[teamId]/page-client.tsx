@@ -3,120 +3,133 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from "../../../components/ThemeProvider";
+import { useAuth } from "../../../context/AuthContext";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { notFound } from "next/navigation";
 import PageLayout from "../../../components/PageLayout";
 import Card from "../../../components/Card";
 
-// Mock data for Alpha team
-const mockAlphaTeam = { 
-  id: "alpha", 
-  name: "ByteBuilders", 
-  logo: "🚀", 
-  description: "A team of innovative developers building the future.",
-  members: [
-    { id: "user1", name: "Alex Johnson", avatar: "AJ", role: "admin", points: 1240, rank: 1 },
-    { id: "user2", name: "Sam Taylor", avatar: "ST", role: "member", points: 980, rank: 2 },
-    { id: "user3", name: "Jordan Lee", avatar: "JL", role: "member", points: 875, rank: 3 },
-    { id: "user6", name: "Morgan Riley", avatar: "MR", role: "member", points: 720, rank: 4 },
-    { id: "user7", name: "Taylor Swift", avatar: "TS", role: "member", points: 650, rank: 5 },
-  ],
-  activity: [
-    { id: "act1", user: "Alex Johnson", avatar: "AJ", action: "merged a pull request", target: "Fix navbar responsiveness", time: "2 hours ago" },
-    { id: "act2", user: "Sam Taylor", avatar: "ST", action: "created an issue", target: "Add dark mode support", time: "5 hours ago" },
-    { id: "act3", user: "Jordan Lee", avatar: "JL", action: "commented on", target: "Implement user authentication", time: "1 day ago" },
-    { id: "act4", user: "Alex Johnson", avatar: "AJ", action: "closed an issue", target: "Fix login button", time: "2 days ago" },
-    { id: "act5", user: "Morgan Riley", avatar: "MR", action: "pushed to", target: "main branch", time: "3 days ago" },
-  ]
+type TeamMember = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  role: string;
+  total_commits: number;
+  rank: number;
 };
 
-// Mock data for demonstration
-const mockTeams = {
-  "alpha": { 
-    id: "alpha", 
-    name: "ByteBuilders", 
-    logo: "🚀", 
-    description: "A team of innovative developers building the future.",
-    members: [
-      { id: "user1", name: "Alex Johnson", avatar: "AJ", role: "admin", points: 1240, rank: 1 },
-      { id: "user2", name: "Sam Taylor", avatar: "ST", role: "member", points: 980, rank: 2 },
-      { id: "user3", name: "Jordan Lee", avatar: "JL", role: "member", points: 875, rank: 3 },
-      { id: "user6", name: "Morgan Riley", avatar: "MR", role: "member", points: 720, rank: 4 },
-      { id: "user7", name: "Taylor Swift", avatar: "TS", role: "member", points: 650, rank: 5 },
-    ],
-    activity: [
-      { id: "act1", user: "Alex Johnson", avatar: "AJ", action: "merged a pull request", target: "Fix navbar responsiveness", time: "2 hours ago" },
-      { id: "act2", user: "Sam Taylor", avatar: "ST", action: "created an issue", target: "Add dark mode support", time: "5 hours ago" },
-      { id: "act3", user: "Jordan Lee", avatar: "JL", action: "commented on", target: "Implement user authentication", time: "1 day ago" },
-      { id: "act4", user: "Alex Johnson", avatar: "AJ", action: "closed an issue", target: "Fix login button", time: "2 days ago" },
-      { id: "act5", user: "Morgan Riley", avatar: "MR", action: "pushed to", target: "main branch", time: "3 days ago" },
-    ]
-  },
-  "bravo": { 
-    id: "bravo", 
-    name: "CodeCrafters", 
-    logo: "⚙️", 
-    description: "Crafting elegant code solutions for complex problems.",
-    members: [
-      { id: "user2", name: "Sam Taylor", avatar: "ST", role: "admin", points: 1540, rank: 1 },
-      { id: "user4", name: "Casey Morgan", avatar: "CM", role: "member", points: 1320, rank: 2 },
-      { id: "user8", name: "Jamie Smith", avatar: "JS", role: "member", points: 950, rank: 3 },
-    ],
-    activity: [
-      { id: "act1", user: "Sam Taylor", avatar: "ST", action: "deployed to", target: "production", time: "1 hour ago" },
-      { id: "act2", user: "Casey Morgan", avatar: "CM", action: "reviewed a pull request", target: "Optimize database queries", time: "3 hours ago" },
-      { id: "act3", user: "Jamie Smith", avatar: "JS", action: "created a branch", target: "feature/user-profiles", time: "1 day ago" },
-    ]
-  },
-  "charlie": { 
-    id: "charlie", 
-    name: "DevDynamos", 
-    logo: "💻", 
-    description: "Dynamic developers pushing the boundaries of technology.",
-    members: [
-      { id: "user3", name: "Jordan Lee", avatar: "JL", role: "admin", points: 1890, rank: 1 },
-      { id: "user1", name: "Alex Johnson", avatar: "AJ", role: "member", points: 1650, rank: 2 },
-      { id: "user5", name: "Riley Smith", avatar: "RS", role: "member", points: 1420, rank: 3 },
-      { id: "user9", name: "Quinn Chen", avatar: "QC", role: "member", points: 1280, rank: 4 },
-    ],
-    activity: [
-      { id: "act1", user: "Jordan Lee", avatar: "JL", action: "merged a pull request", target: "Implement WebSocket", time: "30 minutes ago" },
-      { id: "act2", user: "Alex Johnson", avatar: "AJ", action: "opened a pull request", target: "Add real-time notifications", time: "4 hours ago" },
-      { id: "act3", user: "Riley Smith", avatar: "RS", action: "commented on", target: "API performance issue", time: "1 day ago" },
-      { id: "act4", user: "Quinn Chen", avatar: "QC", action: "created an issue", target: "Mobile view bugs", time: "2 days ago" },
-    ]
-  },
-  "delta": { 
-    id: "delta", 
-    name: "TechTitans", 
-    logo: "⚡", 
-    description: "Titans of technology creating powerful solutions.",
-    members: [
-      { id: "user4", name: "Casey Morgan", avatar: "CM", role: "admin", points: 2150, rank: 1 },
-      { id: "user5", name: "Riley Smith", avatar: "RS", role: "member", points: 1950, rank: 2 },
-      { id: "user10", name: "Avery Zhang", avatar: "AZ", role: "member", points: 1780, rank: 3 },
-    ],
-    activity: [
-      { id: "act1", user: "Casey Morgan", avatar: "CM", action: "deployed to", target: "staging", time: "45 minutes ago" },
-      { id: "act2", user: "Riley Smith", avatar: "RS", action: "merged a pull request", target: "Refactor authentication", time: "3 hours ago" },
-      { id: "act3", user: "Avery Zhang", avatar: "AZ", action: "pushed to", target: "develop branch", time: "6 hours ago" },
-    ]
-  },
+type Team = {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  owner_id: string;
+  member_count: number;
+  members: TeamMember[];
 };
+
 
 // This is a client component that receives the teamId as a prop
 export default function TeamPageClient({ teamId }: { teamId: string }) {
   const { theme } = useTheme();
-  const [team, setTeam] = useState<any>(null);
+  const { user } = useAuth();
+  const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member'>('member'); // In a real app, this would be determined by auth
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null);
+  const [isMember, setIsMember] = useState(false);
+  const supabase = createClientComponentClient();
   
   useEffect(() => {
-    // For demo purposes, always show the Alpha team data
-    console.log("TeamPageClient: teamId =", teamId);
-    setTeam(mockAlphaTeam);
-    setUserRole('owner');
-    setLoading(false);
-  }, [teamId]);
+    const fetchTeamData = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('Fetching team with ID:', teamId);
+        
+        // Fetch team basic info
+        const { data: groupData, error: groupError } = await supabase
+          .from('groups')
+          .select('id, name, description, avatar_url, owner_id')
+          .eq('id', teamId)
+          .single();
+
+        console.log('Group data:', groupData);
+        console.log('Group error:', groupError);
+
+        if (groupError || !groupData) {
+          console.error('Error fetching team:', groupError);
+          setTeam(null);
+          setLoading(false);
+          return;
+        }
+
+        // Check if user is a member and get their role
+        const { data: membershipData } = await supabase
+          .from('group_members')
+          .select('role')
+          .eq('group_id', teamId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipData) {
+          setIsMember(true);
+          setUserRole(membershipData.role as 'owner' | 'admin' | 'member');
+        } else {
+          setIsMember(false);
+          setUserRole(null);
+        }
+
+        // Fetch all members with their stats
+        const { data: membersData, error: membersError } = await supabase
+          .from('group_members')
+          .select(`
+            user_id,
+            role,
+            total_commits,
+            profiles (
+              id,
+              username,
+              avatar_url
+            )
+          `)
+          .eq('group_id', teamId)
+          .order('total_commits', { ascending: false });
+
+        if (membersError) {
+          console.error('Error fetching members:', membersError);
+        }
+
+        // Transform members data and add ranks
+        const members: TeamMember[] = (membersData || []).map((member: any, index: number) => ({
+          id: member.profiles.id,
+          username: member.profiles.username,
+          avatar_url: member.profiles.avatar_url,
+          role: member.role,
+          total_commits: member.total_commits || 0,
+          rank: index + 1,
+        }));
+
+        setTeam({
+          id: groupData.id,
+          name: groupData.name,
+          description: groupData.description,
+          avatar_url: groupData.avatar_url,
+          owner_id: groupData.owner_id,
+          member_count: members.length,
+          members,
+        });
+      } catch (error) {
+        console.error('Unexpected error fetching team:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTeamData();
+  }, [teamId, user, supabase]);
   
   // Common styles
   const buttonStyle = {
@@ -243,21 +256,39 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
         marginBottom: "2rem",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <div style={{
-            width: "4.5rem",
-            height: "4.5rem",
-            borderRadius: "0.75rem",
-            background: theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(226, 232, 240, 0.8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "2.5rem",
-            boxShadow: theme === 'dark' ? 
-              "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)" : 
-              "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
-          }}>
-            {team.logo}
-          </div>
+          {team.avatar_url ? (
+            <img 
+              src={team.avatar_url} 
+              alt={team.name}
+              style={{
+                width: "4.5rem",
+                height: "4.5rem",
+                borderRadius: "0.75rem",
+                objectFit: "cover",
+                boxShadow: theme === 'dark' ? 
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)" : 
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
+              }}
+            />
+          ) : (
+            <div style={{
+              width: "4.5rem",
+              height: "4.5rem",
+              borderRadius: "0.75rem",
+              background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontWeight: 700,
+              fontSize: "1.5rem",
+              boxShadow: theme === 'dark' ? 
+                "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)" : 
+                "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
+            }}>
+              {team.name.substring(0, 2).toUpperCase()}
+            </div>
+          )}
           <div>
             <h1 className="gradient-text" style={{
               fontSize: "2.5rem",
@@ -285,18 +316,30 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
             Back to Teams
           </Link>
           
-          {/* Only show Edit button for admins and owners */}
-          {(userRole === 'admin' || userRole === 'owner') && (
-            <Link 
-              href={`/teams/${teamId}/edit`} 
-              style={primaryButtonStyle}
-            >
+          {/* Show different buttons based on membership */}
+          {isMember ? (
+            (userRole === 'admin' || userRole === 'owner') && (
+              <Link 
+                href={`/teams/${teamId}/edit`} 
+                style={primaryButtonStyle}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Edit Team
+              </Link>
+            )
+          ) : (
+            <button style={primaryButtonStyle}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
               </svg>
-              Edit Team
-            </Link>
+              Request to Join
+            </button>
           )}
         </div>
       </div>
@@ -325,11 +368,11 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
               }}>
                 <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor }}>Rank</div>
                 <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor }}>Member</div>
-                <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor, textAlign: "right" }}>Points</div>
+                <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor, textAlign: "right" }}>Commits</div>
               </div>
               
               {/* Table Rows */}
-              {team.members.sort((a: any, b: any) => a.rank - b.rank).map((member: any) => (
+              {team.members.map((member) => (
                 <div key={member.id} style={{
                   display: "grid",
                   gridTemplateColumns: "50px 1fr 100px",
@@ -350,33 +393,66 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                     #{member.rank}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <div style={{
-                      width: "2.5rem",
-                      height: "2.5rem",
-                      borderRadius: "50%",
-                      background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "white",
-                      fontWeight: 600,
-                    }}>
-                      {member.avatar}
-                    </div>
+                    {member.avatar_url ? (
+                      <img 
+                        src={member.avatar_url} 
+                        alt={member.username}
+                        style={{
+                          width: "2.5rem",
+                          height: "2.5rem",
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        borderRadius: "50%",
+                        background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        fontWeight: 600,
+                        fontSize: "0.875rem",
+                      }}>
+                        {member.username.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div>
-                      <h4 style={{ fontWeight: 600, color: textColor }}>{member.name}</h4>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <h4 style={{ fontWeight: 600, color: textColor }}>{member.username}</h4>
+                        {member.id === user?.id && (
+                          <span style={{ 
+                            fontSize: "0.75rem", 
+                            color: "#3b82f6",
+                            fontWeight: 600,
+                            fontStyle: "italic"
+                          }}>
+                            (You)
+                          </span>
+                        )}
+                      </div>
                       <div style={{ 
                         display: "inline-flex", 
                         alignItems: "center", 
                         gap: "0.25rem",
-                        color: member.role === 'admin' ? "#3b82f6" : mutedColor,
+                        color: member.role === 'owner' ? "#fbbf24" : member.role === 'admin' ? "#3b82f6" : mutedColor,
                         fontSize: "0.75rem",
                         fontWeight: 600,
-                        background: member.role === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
+                        background: member.role === 'owner' ? "rgba(251, 191, 36, 0.1)" : member.role === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
                         padding: "0.125rem 0.5rem",
                         borderRadius: "9999px",
                       }}>
-                        {member.role === 'admin' ? (
+                        {member.role === 'owner' ? (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
+                            </svg>
+                            Owner
+                          </>
+                        ) : member.role === 'admin' ? (
                           <>
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
@@ -399,7 +475,7 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                     </div>
                   </div>
                   <div style={{ fontWeight: 700, fontSize: "1.125rem", color: textColor, textAlign: "right" }}>
-                    {member.points.toLocaleString()}
+                    {member.total_commits.toLocaleString()}
                   </div>
                 </div>
               ))}
@@ -407,66 +483,45 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
           </div>
         </div>
         
-        {/* Right Column - Activity and Members */}
+        {/* Right Column - Team Stats */}
         <div style={{ flex: "1 1 400px", display: "flex", flexDirection: "column", gap: "2rem" }}>
-          {/* Activity Feed */}
+          {/* Team Stats */}
           <div style={sectionStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor }}>
-                Recent Activity
-              </h2>
-              <Link 
-                href={`/teams/${teamId}/activity`}
-                style={{
-                  ...buttonStyle,
-                  fontSize: "0.875rem",
-                  padding: "0.375rem 0.75rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.25rem"
-                }}
-              >
-                <span>See All</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </Link>
-            </div>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor, marginBottom: "1.5rem" }}>
+              Team Stats
+            </h2>
             
             <div style={{ 
               display: "flex",
               flexDirection: "column",
-              gap: "0.75rem"
+              gap: "1rem"
             }}>
-              {team.activity.slice(0, 3).map((item: any) => (
-                <div key={item.id} style={cardStyle}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <div style={{
-                      width: "2.5rem",
-                      height: "2.5rem",
-                      borderRadius: "50%",
-                      background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "white",
-                      fontWeight: 600,
-                    }}>
-                      {item.avatar}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontWeight: 600, color: textColor }}>{item.user}</span>
-                        <span style={{ fontSize: "0.75rem", color: mutedColor }}>{item.time}</span>
-                      </div>
-                      <p style={{ fontSize: "0.875rem", color: mutedColor, marginTop: "0.25rem" }}>
-                        <span>{item.action}</span>{" "}
-                        <span style={{ fontWeight: 500, color: textColor }}>{item.target}</span>
-                      </p>
-                    </div>
+              <div style={cardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Total Members</span>
+                  <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>{team.member_count}</span>
+                </div>
+              </div>
+              
+              <div style={cardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Total Commits</span>
+                  <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>
+                    {team.members.reduce((sum, m) => sum + m.total_commits, 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              
+              {isMember && (
+                <div style={cardStyle}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Your Rank</span>
+                    <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>
+                      #{team.members.find(m => m.id === user?.id)?.rank || '-'}
+                    </span>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
           
@@ -482,100 +537,62 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
               display: "flex", 
               flexDirection: "column", 
               gap: "0.75rem",
+              maxHeight: "400px",
+              overflowY: "auto",
             }}>
-              {/* You (with appropriate role) */}
-              <div style={cardStyle}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <div style={{
-                    width: "2.5rem",
-                    height: "2.5rem",
-                    borderRadius: "50%",
-                    background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "white",
-                    fontWeight: 600,
-                  }}>
-                    YU
-                  </div>
-                  <div>
-                    <h4 style={{ fontWeight: 600, color: textColor }}>You</h4>
-                    <div style={{ 
-                      display: "inline-flex", 
-                      alignItems: "center", 
-                      gap: "0.25rem",
-                      color: userRole === 'owner' ? "#f59e0b" : userRole === 'admin' ? "#3b82f6" : mutedColor,
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      background: userRole === 'owner' ? "rgba(245, 158, 11, 0.1)" : userRole === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
-                      padding: "0.125rem 0.5rem",
-                      borderRadius: "9999px",
-                      marginTop: "0.25rem",
-                    }}>
-                      {userRole === 'owner' ? (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
-                          </svg>
-                          Owner
-                        </>
-                      ) : userRole === 'admin' ? (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M22 12h-4"></path>
-                            <path d="M18 8v8"></path>
-                          </svg>
-                          Admin
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                          </svg>
-                          Member
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Other Team Members - Limited to 4 with View All option */}
-              {team.members.slice(0, 4).map((member: any) => (
+              {/* Team Members - Show top 5 */}
+              {team.members.slice(0, 5).map((member) => (
                 <div key={member.id} style={cardStyle}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <div style={{
-                      width: "2.5rem",
-                      height: "2.5rem",
-                      borderRadius: "50%",
-                      background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "white",
-                      fontWeight: 600,
-                    }}>
-                      {member.avatar}
-                    </div>
+                    {member.avatar_url ? (
+                      <img 
+                        src={member.avatar_url} 
+                        alt={member.username}
+                        style={{
+                          width: "2.5rem",
+                          height: "2.5rem",
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        borderRadius: "50%",
+                        background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        fontWeight: 600,
+                        fontSize: "0.875rem",
+                      }}>
+                        {member.username.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div>
-                      <h4 style={{ fontWeight: 600, color: textColor }}>{member.name}</h4>
+                      <h4 style={{ fontWeight: 600, color: textColor }}>{member.username}</h4>
                       <div style={{ 
                         display: "inline-flex", 
                         alignItems: "center", 
                         gap: "0.25rem",
-                        color: member.role === 'admin' ? "#3b82f6" : mutedColor,
+                        color: member.role === 'owner' ? "#fbbf24" : member.role === 'admin' ? "#3b82f6" : mutedColor,
                         fontSize: "0.75rem",
                         fontWeight: 600,
-                        background: member.role === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
+                        background: member.role === 'owner' ? "rgba(251, 191, 36, 0.1)" : member.role === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
                         padding: "0.125rem 0.5rem",
                         borderRadius: "9999px",
                         marginTop: "0.25rem",
                       }}>
-                        {member.role === 'admin' ? (
+                        {member.role === 'owner' ? (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
+                            </svg>
+                            Owner
+                          </>
+                        ) : member.role === 'admin' ? (
                           <>
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>

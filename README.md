@@ -6,7 +6,7 @@ A platform for solo developers to compete with each other on coding consistency.
 
 ByteRank helps developers build and maintain coding habits by gamifying consistency. Create or join teams, track your daily contributions, and see how you rank against other developers.
 
-This is an early-stage project with plans to add more features and grow the community over time.
+I'm still working on it and not 100% sure what type of features I'll add but hopefully LeetCode integration and possibly a Discord bot version
 
 ## Technologies
 

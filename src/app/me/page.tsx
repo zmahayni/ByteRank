@@ -108,7 +108,7 @@ export default function ProfilePage() {
       
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('Avatars')
+        .from('profile-avatars')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: true
@@ -125,7 +125,7 @@ export default function ProfilePage() {
       
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('Avatars')
+        .from('profile-avatars')
         .getPublicUrl(filePath);
       
       console.log('Public URL:', publicUrl);

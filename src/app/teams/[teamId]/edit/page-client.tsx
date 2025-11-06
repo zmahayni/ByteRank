@@ -118,8 +118,17 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
 
     setUploading(true);
     try {
+      // Debug: start upload context
+      console.log('[GroupAvatar][uploadAvatar] start', {
+        teamId,
+        userId: user.id,
+        bucket: 'group-avatars',
+        file: { name: avatarFile.name, type: avatarFile.type, size: avatarFile.size }
+      });
+
       const fileExt = avatarFile.name.split('.').pop();
       const fileName = `${teamId}/${Date.now()}.${fileExt}`;
+      console.log('[GroupAvatar][uploadAvatar] computed path', { fileName });
 
       const { error: uploadError, data } = await supabase.storage
         .from('group-avatars')
@@ -129,7 +138,8 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
         });
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
+        console.error('[GroupAvatar][uploadAvatar] upload error', uploadError);
+        try { console.log('[GroupAvatar][uploadAvatar] upload error as JSON', JSON.stringify(uploadError)); } catch {}
         setError('Failed to upload avatar');
         setUploading(false);
         return null;
@@ -139,11 +149,12 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
       const { data: { publicUrl } } = supabase.storage
         .from('group-avatars')
         .getPublicUrl(fileName);
+      console.log('[GroupAvatar][uploadAvatar] public url', { publicUrl, data });
 
       setUploading(false);
       return publicUrl;
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error('[GroupAvatar][uploadAvatar] unexpected error', err);
       setError('Failed to upload avatar');
       setUploading(false);
       return null;
@@ -171,10 +182,34 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
     try {
       // Upload avatar if a new file was selected
       let finalAvatarUrl = currentAvatarUrl;
+      console.log('[GroupAvatar][handleSubmit] before upload', {
+        hasFile: !!avatarFile,
+        currentAvatarUrl
+      });
+
+      // DEBUG: verify we can read the group row and that ownership matches
+      try {
+        const { data: dbgGroup, error: dbgGroupErr } = await supabase
+          .from('groups')
+          .select('id, owner_id')
+          .eq('id', teamId)
+          .single();
+        console.log('[GroupAvatar][debug] group row check', {
+          teamId,
+          dbgGroup,
+          dbgGroupErr,
+          userId: user!.id,
+          ownerMatches: dbgGroup ? dbgGroup.owner_id === user!.id : undefined,
+        });
+      } catch (e) {
+        console.log('[GroupAvatar][debug] error checking group row', e);
+      }
+
       if (avatarFile) {
         const uploadedUrl = await uploadAvatar();
         if (uploadedUrl) {
           finalAvatarUrl = uploadedUrl;
+          console.log('[GroupAvatar][handleSubmit] uploaded url', { finalAvatarUrl });
         } else {
           setSaving(false);
           return; // Error message already set by uploadAvatar
@@ -192,7 +227,7 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
         .eq('owner_id', user!.id); // Double-check ownership in the query
 
       if (updateError) {
-        console.error('Error updating team:', updateError);
+        console.error('[GroupAvatar][handleSubmit] update error', updateError);
         setError('Failed to update team. Please try again.');
         setSaving(false);
         return;
@@ -204,13 +239,14 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
       // Update the current avatar URL to reflect the new one
       if (finalAvatarUrl) {
         setCurrentAvatarUrl(finalAvatarUrl);
+        console.log('[GroupAvatar][handleSubmit] updated currentAvatarUrl', { finalAvatarUrl });
       }
       
       // Clear the file selection
       setAvatarFile(null);
       setAvatarPreview(null);
     } catch (err) {
-      console.error('Error:', err);
+      console.error('[GroupAvatar][handleSubmit] unexpected error', err);
       setError('An unexpected error occurred');
       setSaving(false);
     }

@@ -240,29 +240,39 @@ export default function CommunityPage() {
 
   // Sample friends list component for right sidebar
   const FriendsList = () => (
-    <div>
+    <div style={{
+      background: theme === 'dark' ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+      borderRadius: "1rem",
+      border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.5)" : "1px solid rgba(203, 213, 225, 0.5)",
+      boxShadow: theme === 'dark' ? 
+        "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)" : 
+        "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)",
+      padding: "1.5rem",
+    }}>
       <h3 style={{ 
         fontSize: "1.125rem", 
         fontWeight: 600, 
         color: theme === 'dark' ? "#e2e8f0" : "#1e293b",
         marginTop: 0,
-        marginBottom: "var(--gap-medium)"
+        marginBottom: "1rem"
       }}>
         Online Friends
       </h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--gap-small)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {["Alex Johnson", "Sam Taylor", "Jordan Lee", "Morgan Riley"].map((name, index) => (
           <div key={index} style={{
             display: "flex",
             alignItems: "center",
-            gap: "var(--gap-small)",
-            padding: "var(--gap-small)",
-            borderRadius: "var(--radius)",
+            gap: "0.75rem",
+            padding: "0.75rem",
+            borderRadius: "0.5rem",
             background: theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)",
+            transition: "background 0.2s",
+            cursor: "pointer",
           }}>
             <div style={{
-              width: "2rem",
-              height: "2rem",
+              width: "2.5rem",
+              height: "2.5rem",
               borderRadius: "50%",
               background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
               display: "flex",
@@ -270,11 +280,16 @@ export default function CommunityPage() {
               justifyContent: "center",
               color: "white",
               fontWeight: 600,
-              fontSize: "0.75rem"
+              fontSize: "0.875rem",
+              flexShrink: 0,
             }}>
               {name.split(" ").map(part => part[0]).join("")}
             </div>
-            <span style={{ fontSize: "0.875rem", color: theme === 'dark' ? "#e2e8f0" : "#1e293b" }}>{name}</span>
+            <span style={{ 
+              fontSize: "0.875rem", 
+              color: theme === 'dark' ? "#e2e8f0" : "#1e293b",
+              fontWeight: 500,
+            }}>{name}</span>
           </div>
         ))}
       </div>
@@ -282,7 +297,7 @@ export default function CommunityPage() {
   );
 
   return (
-    <PageLayout rightSidebar={<FriendsList />}>
+    <PageLayout>
       {/* Page Header */}
       <div style={{
         display: "flex",
@@ -298,13 +313,20 @@ export default function CommunityPage() {
         </h1>
       </div>
       
-      {/* Main Content */}
+      {/* Main Layout with Content and Friends List */}
       <div style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--gap-large)",
+        display: "grid",
+        gridTemplateColumns: "1fr 280px",
+        gap: "2rem",
         width: "100%",
+        alignItems: "start",
       }}>
+        {/* Main Content */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--gap-large)",
+        }}>
         {/* Search Section */}
         <Card title="Find Teams">
           <div style={{
@@ -722,6 +744,15 @@ export default function CommunityPage() {
               )}
             </Card>
           </div>
+        </div>
+        </div>
+        
+        {/* Right Column - Online Friends */}
+        <div style={{
+          position: "sticky",
+          top: "2rem",
+        }}>
+          <FriendsList />
         </div>
       </div>
     </PageLayout>

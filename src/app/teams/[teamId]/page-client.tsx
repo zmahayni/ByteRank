@@ -247,7 +247,7 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
   );
 
   return (
-    <PageLayout rightSidebar={<FriendsList />}>
+    <PageLayout>
       {/* Page Header */}
       <div style={{
         display: "flex",

@@ -144,6 +144,20 @@ export default function Navbar() {
           Profile
         </Link>
         <Link 
+          href="/whats-new" 
+          style={navButtonStyle}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = theme === 'dark' ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.9)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(241, 245, 249, 0.8)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          What's New
+        </Link>
+        <Link 
           href="/feedback" 
           style={navButtonStyle}
           onMouseOver={(e) => {

@@ -183,6 +183,57 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
   const textColor = theme === 'dark' ? "#e2e8f0" : "#1e293b";
   const mutedColor = theme === 'dark' ? "#94a3b8" : "#64748b";
 
+  // Handle leave team
+  const handleLeaveTeam = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', teamId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error leaving team:', error);
+        return;
+      }
+
+      // Redirect back to teams
+      window.location.href = '/teams';
+    } catch (error) {
+      console.error('Unexpected error leaving team:', error);
+    }
+  };
+
+  // Handle remove member
+  const handleRemoveMember = async (memberId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', teamId)
+        .eq('user_id', memberId);
+
+      if (error) {
+        console.error('Error removing member:', error);
+        return;
+      }
+
+      // Refresh team data
+      if (team) {
+        setTeam({
+          ...team,
+          members: team.members.filter(m => m.id !== memberId),
+        });
+      }
+    } catch (error) {
+      console.error('Unexpected error removing member:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -318,18 +369,40 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
           
           {/* Show different buttons based on membership */}
           {isMember ? (
-            userRole === 'owner' && (
-              <Link 
-                href={`/teams/${teamId}/edit`} 
-                style={primaryButtonStyle}
+            <>
+              {(userRole === 'owner' || userRole === 'admin') && (
+                <Link 
+                  href={`/teams/${teamId}/invites`} 
+                  style={primaryButtonStyle}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  Invite Members
+                </Link>
+              )}
+              {userRole === 'owner' && (
+                <Link 
+                  href={`/teams/${teamId}/edit`} 
+                  style={primaryButtonStyle}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  Edit Team
+                </Link>
+              )}
+              <button 
+                onClick={handleLeaveTeam}
+                style={buttonStyle}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit Team
-              </Link>
-            )
+                Leave Team
+              </button>
+            </>
           ) : (
             <button style={primaryButtonStyle}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -361,7 +434,7 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
               {/* Table Header */}
               <div style={{
                 display: "grid",
-                gridTemplateColumns: "50px 1fr 100px",
+                gridTemplateColumns: (userRole === 'owner' || userRole === 'admin') ? "50px 1fr 100px 80px" : "50px 1fr 100px",
                 gap: "1rem",
                 padding: "0.5rem 1rem",
                 borderBottom: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
@@ -369,13 +442,16 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                 <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor }}>Rank</div>
                 <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor }}>Member</div>
                 <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor, textAlign: "right" }}>Commits</div>
+                {(userRole === 'owner' || userRole === 'admin') && (
+                  <div style={{ fontWeight: 600, fontSize: "0.875rem", color: mutedColor, textAlign: "right" }}>Action</div>
+                )}
               </div>
               
               {/* Table Rows */}
               {team.members.map((member) => (
                 <div key={member.id} style={{
                   display: "grid",
-                  gridTemplateColumns: "50px 1fr 100px",
+                  gridTemplateColumns: (userRole === 'owner' || userRole === 'admin') ? "50px 1fr 100px 80px" : "50px 1fr 100px",
                   gap: "1rem",
                   alignItems: "center",
                   ...cardStyle,
@@ -477,6 +553,30 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                   <div style={{ fontWeight: 700, fontSize: "1.125rem", color: textColor, textAlign: "right" }}>
                     {member.total_commits.toLocaleString()}
                   </div>
+                  {(userRole === 'owner' || userRole === 'admin') && member.id !== user?.id && (
+                    <button
+                      onClick={() => handleRemoveMember(member.id)}
+                      style={{
+                        background: "#ef4444",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "0.375rem",
+                        padding: "0.375rem 0.75rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#dc2626";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#ef4444";
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

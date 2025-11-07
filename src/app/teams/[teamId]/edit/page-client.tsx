@@ -59,9 +59,21 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
           return;
         }
 
-        // Check if user is the owner
+        // Check if user is the owner (not admin or member)
         if (team.owner_id !== user.id) {
-          setError('Only the team owner can edit this team');
+          // Check if user is an admin to provide specific message
+          const { data: memberData } = await supabase
+            .from('group_members')
+            .select('role')
+            .eq('group_id', teamId)
+            .eq('user_id', user.id)
+            .single();
+          
+          if (memberData?.role === 'admin') {
+            setError('Admins cannot edit team settings. Only the team owner has edit permissions.');
+          } else {
+            setError('Only the team owner can edit this team');
+          }
           setIsOwner(false);
           setLoading(false);
           return;

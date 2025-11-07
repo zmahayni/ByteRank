@@ -318,7 +318,7 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
           
           {/* Show different buttons based on membership */}
           {isMember ? (
-            (userRole === 'admin' || userRole === 'owner') && (
+            userRole === 'owner' && (
               <Link 
                 href={`/teams/${teamId}/edit`} 
                 style={primaryButtonStyle}

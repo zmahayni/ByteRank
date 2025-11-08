@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "../../../components/ThemeProvider";
+import { useAuth } from "../../../context/AuthContext";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 // Mock data for demonstration
 const mockUsers = [
@@ -14,14 +17,19 @@ const mockUsers = [
 
 export default function CreateTeamPage() {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const router = useRouter();
+  const supabase = createClientComponentClient();
   
   // Form state
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
   const [teamLogo, setTeamLogo] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [accessPolicy, setAccessPolicy] = useState<'open' | 'closed'>('closed');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Team members management
+  // Team members management (removed for now - just create team with owner)
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -80,22 +88,56 @@ export default function CreateTeamPage() {
   };
   
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // In a real app, you'd send this data to your backend
-    const teamData = {
-      name: teamName,
-      description: teamDescription,
-      logo: teamLogo,
-      members: teamMembers,
-    };
+    if (!user || !teamName.trim()) return;
     
-    console.log('Team data to submit:', teamData);
+    setIsSubmitting(true);
     
-    // Redirect to teams page after successful creation
-    // In a real app, you'd wait for the API response before redirecting
-    window.location.href = '/teams';
+    try {
+      // Create the team
+      const { data: teamData, error: teamError } = await supabase
+        .from('groups')
+        .insert({
+          name: teamName.trim(),
+          description: teamDescription.trim() || null,
+          avatar_url: logoPreview || null,
+          owner_id: user.id,
+          access_policy: accessPolicy,
+        })
+        .select()
+        .single();
+
+      if (teamError) {
+        console.error('Error creating team:', teamError);
+        alert('Failed to create team. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Add creator as owner member
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: teamData.id,
+          user_id: user.id,
+          role: 'owner',
+          total_commits: 0,
+        });
+
+      if (memberError) {
+        console.error('Error adding owner:', memberError);
+        // Team created but failed to add owner - should still redirect
+      }
+
+      // Redirect to the new team page
+      router.push(`/teams/${teamData.id}`);
+    } catch (error) {
+      console.error('Unexpected error creating team:', error);
+      alert('Failed to create team. Please try again.');
+      setIsSubmitting(false);
+    }
   };
   
   // Common styles
@@ -301,6 +343,61 @@ export default function CreateTeamPage() {
               />
             </div>
             </div>
+
+            {/* Access Policy */}
+            <div style={{ marginTop: "1.5rem" }}>
+              <label style={{ display: "block", marginBottom: "0.75rem", color: theme === 'dark' ? "#94a3b8" : "#64748b", fontSize: "0.875rem", fontWeight: 600 }}>
+                Team Access
+              </label>
+              <div style={{ display: "flex", gap: "1rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setAccessPolicy('open')}
+                  style={{
+                    flex: 1,
+                    padding: "1rem",
+                    borderRadius: "0.5rem",
+                    border: accessPolicy === 'open' 
+                      ? "2px solid #3b82f6" 
+                      : theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid #cbd5e1",
+                    background: accessPolicy === 'open'
+                      ? theme === 'dark' ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.05)"
+                      : theme === 'dark' ? "rgba(15, 23, 42, 0.3)" : "#f9fafb",
+                    color: theme === 'dark' ? "white" : "#1e293b",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Open</div>
+                  <div style={{ fontSize: "0.75rem", color: theme === 'dark' ? "#94a3b8" : "#64748b" }}>
+                    Anyone can join directly
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccessPolicy('closed')}
+                  style={{
+                    flex: 1,
+                    padding: "1rem",
+                    borderRadius: "0.5rem",
+                    border: accessPolicy === 'closed' 
+                      ? "2px solid #3b82f6" 
+                      : theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid #cbd5e1",
+                    background: accessPolicy === 'closed'
+                      ? theme === 'dark' ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.05)"
+                      : theme === 'dark' ? "rgba(15, 23, 42, 0.3)" : "#f9fafb",
+                    color: theme === 'dark' ? "white" : "#1e293b",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Closed</div>
+                  <div style={{ fontSize: "0.75rem", color: theme === 'dark' ? "#94a3b8" : "#64748b" }}>
+                    Requires approval or invite
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -432,23 +529,10 @@ export default function CreateTeamPage() {
             ) : null}
           </div>
           
-          {/* Current Team Members */}
-          <div>
-            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: theme === 'dark' ? "#94a3b8" : "#64748b", marginBottom: "0.5rem" }}>
-              Current Team Members ({teamMembers.length})
-            </h3>
-            
+          {/* Removed Current Team Members section - members can be invited after creation */}
+          <div style={{ display: "none" }}>
             {teamMembers.length === 0 ? (
-              <div style={{ 
-                padding: "1.5rem", 
-                textAlign: "center", 
-                color: theme === 'dark' ? "#94a3b8" : "#64748b",
-                background: theme === 'dark' ? "rgba(15, 23, 42, 0.3)" : "rgba(248, 250, 252, 0.8)",
-                borderRadius: "0.375rem",
-                border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.4)" : "1px solid rgba(203, 213, 225, 0.5)",
-              }}>
-                No team members added yet. Use the search above to add members.
-              </div>
+              <div></div>
             ) : (
               <div style={{ 
                 display: "flex", 
@@ -644,13 +728,16 @@ export default function CreateTeamPage() {
           </Link>
           <button 
             type="submit"
+            disabled={isSubmitting || !teamName.trim()}
             style={{
               ...primaryButtonStyle,
               height: "42px",
               padding: "0 2rem",
+              opacity: isSubmitting || !teamName.trim() ? 0.5 : 1,
+              cursor: isSubmitting || !teamName.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            Create Team
+            {isSubmitting ? 'Creating...' : 'Create Team'}
           </button>
         </div>
       </form>

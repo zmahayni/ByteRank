@@ -26,12 +26,21 @@ type FriendRequest = {
   };
 };
 
+type TeamInvite = {
+  id: string;
+  group_id: string;
+  team_name: string;
+  team_avatar: string | null;
+  created_at: string;
+};
+
 export default function InboxPage() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const supabase = createClientComponentClient();
 
   const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch friend requests for this user
@@ -66,6 +75,38 @@ export default function InboxPage() {
 
         if (data) {
           setRequests(data as any);
+        }
+
+        // Fetch team invites
+        const { data: invitesData, error: invitesError } = await supabase
+          .from('group_invitations')
+          .select(`
+            id,
+            group_id,
+            created_at,
+            groups (
+              name,
+              avatar_url
+            )
+          `)
+          .eq('invited_user', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (invitesError) {
+          console.error('Error fetching team invites:', invitesError);
+        }
+
+        if (invitesData) {
+          setTeamInvites(
+            invitesData.map((inv: any) => ({
+              id: inv.id,
+              group_id: inv.group_id,
+              team_name: inv.groups.name,
+              team_avatar: inv.groups.avatar_url,
+              created_at: inv.created_at,
+            }))
+          );
         }
       } catch (error) {
         console.error('Unexpected error fetching requests:', error);
@@ -140,6 +181,63 @@ export default function InboxPage() {
     }
   };
 
+  // Handle accept team invite
+  const handleAcceptTeamInvite = async (inviteId: string, groupId: string) => {
+    if (!user) return;
+
+    try {
+      // Update invite status to accepted
+      const { error: updateError } = await supabase
+        .from('group_invitations')
+        .update({ status: 'accepted' })
+        .eq('id', inviteId);
+
+      if (updateError) {
+        console.error('Error accepting invite:', updateError);
+        return;
+      }
+
+      // Add user to group as member
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: groupId,
+          user_id: user.id,
+          role: 'member',
+          total_commits: 0,
+        });
+
+      if (memberError) {
+        console.error('Error adding to group:', memberError);
+        return;
+      }
+
+      // Remove from list
+      setTeamInvites(teamInvites.filter(i => i.id !== inviteId));
+    } catch (error) {
+      console.error('Unexpected error accepting invite:', error);
+    }
+  };
+
+  // Handle decline team invite
+  const handleDeclineTeamInvite = async (inviteId: string) => {
+    try {
+      const { error } = await supabase
+        .from('group_invitations')
+        .delete()
+        .eq('id', inviteId);
+
+      if (error) {
+        console.error('Error declining invite:', error);
+        return;
+      }
+
+      // Remove from list
+      setTeamInvites(teamInvites.filter(i => i.id !== inviteId));
+    } catch (error) {
+      console.error('Unexpected error declining invite:', error);
+    }
+  };
 
   // Common styles
   const headingColor = theme === 'dark' ? "#e2e8f0" : "#1e293b";
@@ -231,7 +329,90 @@ export default function InboxPage() {
           </Link>
         </div>
 
-        {/* Received Requests Section */}
+        {/* Team Invites Section */}
+        <div style={{ marginBottom: "2rem" }}>
+          <h2 style={{
+            fontSize: "1.25rem",
+            fontWeight: 600,
+            color: headingColor,
+            marginBottom: "1rem",
+          }}>
+            Team Invites
+          </h2>
+          <div style={cardStyle}>
+            {teamInvites.length === 0 ? (
+              <div style={{
+                padding: "2rem",
+                textAlign: "center",
+                color: labelColor,
+              }}>
+                No team invites
+              </div>
+            ) : (
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "1rem",
+              }}>
+                {teamInvites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    style={{
+                      ...itemStyle,
+                      padding: "1rem",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        color: headingColor,
+                        fontWeight: 600,
+                        fontSize: "0.9375rem",
+                        marginBottom: "0.25rem",
+                      }}>
+                        {invite.team_name}
+                      </div>
+
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: labelColor,
+                      }}>
+                        Invited {new Date(invite.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{
+                      display: "flex",
+                      gap: "0.5rem",
+                      flexShrink: 0,
+                    }}>
+                      <button
+                        onClick={() => handleAcceptTeamInvite(invite.id, invite.group_id)}
+                        style={buttonStyle}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleDeclineTeamInvite(invite.id)}
+                        style={secondaryButtonStyle}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Friend Requests Section */}
         <div style={{ marginBottom: "2rem" }}>
           <h2 style={{
             fontSize: "1.25rem",
@@ -322,76 +503,7 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {/* Sent Requests Section */}
-        <div>
-          <h2 style={{
-            fontSize: "1.25rem",
-            fontWeight: 600,
-            color: headingColor,
-            marginBottom: "1rem",
-          }}>
-            Pending Requests
-          </h2>
-          <div style={cardStyle}>
-            {requests.filter(r => r.requester_id === user?.id && r.status === 'pending').length === 0 ? (
-              <div style={{
-                padding: "2rem",
-                textAlign: "center",
-                color: labelColor,
-              }}>
-                No pending requests
-              </div>
-            ) : (
-              <div style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "1rem",
-              }}>
-                {requests
-                  .filter(r => r.requester_id === user?.id && r.status === 'pending')
-                  .map((request) => {
-                    const otherUser = request.recipient;
-
-                    return (
-                      <div
-                        key={request.id}
-                        style={{
-                          ...itemStyle,
-                          padding: "1rem",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            color: headingColor,
-                            fontWeight: 600,
-                            fontSize: "0.9375rem",
-                            marginBottom: "0.25rem",
-                          }}>
-                            {otherUser.username}
-                          </div>
-
-                          <div style={{
-                            fontSize: "0.75rem",
-                            color: labelColor,
-                          }}>
-                            pending · {new Date(request.created_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Removed Pending Requests section - only show received requests and team invites */}
       </div>
     </PageLayout>
   );

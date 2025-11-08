@@ -15,6 +15,14 @@ type Invite = {
   created_at: string;
 };
 
+type JoinRequest = {
+  id: string;
+  requester_id: string;
+  username: string;
+  avatar_url: string | null;
+  created_at: string;
+};
+
 type Friend = {
   id: string;
   username: string;
@@ -32,6 +40,7 @@ export default function InvitesPageClient({ teamId }: { teamId: string }) {
   const supabase = createClientComponentClient();
 
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -132,6 +141,34 @@ export default function InvitesPageClient({ teamId }: { teamId: string }) {
               username: inv.profiles.username,
               avatar_url: inv.profiles.avatar_url,
               created_at: inv.created_at,
+            }))
+          );
+        }
+
+        // Fetch pending join requests
+        const { data: requestsData } = await supabase
+          .from('group_join_requests')
+          .select(`
+            id,
+            requester_id,
+            created_at,
+            profiles (
+              username,
+              avatar_url
+            )
+          `)
+          .eq('group_id', teamId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (requestsData) {
+          setJoinRequests(
+            requestsData.map((req: any) => ({
+              id: req.id,
+              requester_id: req.requester_id,
+              username: req.profiles.username,
+              avatar_url: req.profiles.avatar_url,
+              created_at: req.created_at,
             }))
           );
         }
@@ -307,6 +344,62 @@ export default function InvitesPageClient({ teamId }: { teamId: string }) {
     }
   };
 
+  // Handle approve join request
+  const handleApproveRequest = async (requestId: string, requesterId: string) => {
+    try {
+      // Update request status
+      const { error: updateError } = await supabase
+        .from('group_join_requests')
+        .update({ status: 'approved', decided_at: new Date().toISOString(), decided_by: user?.id })
+        .eq('id', requestId);
+
+      if (updateError) {
+        console.error('Error approving request:', updateError);
+        return;
+      }
+
+      // Add user to group
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: teamId,
+          user_id: requesterId,
+          role: 'member',
+          total_commits: 0,
+        });
+
+      if (memberError) {
+        console.error('Error adding member:', memberError);
+        return;
+      }
+
+      // Update requests list
+      setJoinRequests(joinRequests.filter(r => r.id !== requestId));
+    } catch (error) {
+      console.error('Unexpected error approving request:', error);
+    }
+  };
+
+  // Handle reject join request
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('group_join_requests')
+        .update({ status: 'rejected', decided_at: new Date().toISOString(), decided_by: user?.id })
+        .eq('id', requestId);
+
+      if (error) {
+        console.error('Error rejecting request:', error);
+        return;
+      }
+
+      // Update requests list
+      setJoinRequests(joinRequests.filter(r => r.id !== requestId));
+    } catch (error) {
+      console.error('Unexpected error rejecting request:', error);
+    }
+  };
+
   if (loading) {
     return (
       <PageLayout>
@@ -344,7 +437,7 @@ export default function InvitesPageClient({ teamId }: { teamId: string }) {
             ← Back to {teamName}
           </Link>
           <h1 className="gradient-text" style={{ fontSize: "2.5rem", fontWeight: "bold" }}>
-            Invite Members
+            Invites & Requests
           </h1>
         </div>
 
@@ -449,8 +542,122 @@ export default function InvitesPageClient({ teamId }: { teamId: string }) {
             </div>
           </div>
 
-          {/* Right Column - Pending Invites */}
-          <div style={{ flex: "1 1 400px" }}>
+          {/* Right Column - Pending Invites & Join Requests */}
+          <div style={{ flex: "1 1 400px", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            {/* Join Requests Section */}
+            <div style={cardStyle}>
+              <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor, marginBottom: "1rem" }}>
+                Join Requests ({joinRequests.length})
+              </h2>
+
+              {joinRequests.length === 0 ? (
+                <div style={{ color: mutedColor, textAlign: "center", padding: "1rem" }}>
+                  No pending requests
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {joinRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.75rem",
+                        background: theme === 'dark' ? "rgba(15, 23, 42, 0.5)" : "rgba(255, 255, 255, 0.5)",
+                        borderRadius: "0.375rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: 1 }}>
+                        {request.avatar_url ? (
+                          <img
+                            src={request.avatar_url}
+                            alt={request.username}
+                            style={{
+                              width: "2.5rem",
+                              height: "2.5rem",
+                              borderRadius: "50%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "2.5rem",
+                              height: "2.5rem",
+                              borderRadius: "50%",
+                              background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "white",
+                              fontWeight: 600,
+                              fontSize: "0.875rem",
+                            }}
+                          >
+                            {request.username.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ color: textColor, fontWeight: 500 }}>{request.username}</div>
+                          <div style={{ color: mutedColor, fontSize: "0.75rem" }}>
+                            {new Date(request.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button
+                          onClick={() => handleApproveRequest(request.id, request.requester_id)}
+                          style={{
+                            background: "linear-gradient(to right, #3b82f6, #8b5cf6)",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "0.375rem",
+                            padding: "0.375rem 0.75rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectRequest(request.id)}
+                          style={{
+                            background: "#ef4444",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "0.375rem",
+                            padding: "0.375rem 0.75rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "#dc2626";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "#ef4444";
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Pending Invites Section */}
             <div style={cardStyle}>
               <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor, marginBottom: "1rem" }}>
                 Pending Invites ({invites.length})

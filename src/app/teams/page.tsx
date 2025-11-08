@@ -26,6 +26,7 @@ type SearchTeam = {
   member_count: number;
   is_member: boolean;
   access_policy: string;
+  has_requested?: boolean;
 };
 
 type SearchPerson = {
@@ -155,7 +156,7 @@ export default function CommunityPage() {
         console.error('Error searching people:', peopleError);
       }
       
-      // Process teams: get member count and check if user is member
+      // Process teams: get member count and check if user is member or has requested
       const teamsWithDetails: SearchTeam[] = await Promise.all(
         (teamsData || []).map(async (team) => {
           const { count } = await supabase
@@ -171,6 +172,15 @@ export default function CommunityPage() {
             .eq('user_id', user?.id || '')
             .single();
           
+          // Check if user has pending request
+          const { data: requestCheck } = await supabase
+            .from('group_join_requests')
+            .select('id')
+            .eq('group_id', team.id)
+            .eq('requester_id', user?.id || '')
+            .eq('status', 'pending')
+            .single();
+          
           return {
             type: 'team',
             id: team.id,
@@ -179,6 +189,7 @@ export default function CommunityPage() {
             member_count: count || 0,
             is_member: !!memberCheck,
             access_policy: team.access_policy,
+            has_requested: !!requestCheck,
           };
         })
       );
@@ -278,7 +289,7 @@ export default function CommunityPage() {
   // Inbox state
   const [hasUnreadInbox, setHasUnreadInbox] = useState(false);
 
-  // Handle join team
+  // Handle join team (open teams only)
   const handleJoinTeam = async (teamId: string) => {
     if (!user) return;
 
@@ -347,6 +358,35 @@ export default function CommunityPage() {
       }
     } catch (error) {
       console.error('Unexpected error joining team:', error);
+    }
+  };
+
+  // Handle request to join (closed teams)
+  const handleRequestToJoin = async (teamId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_join_requests')
+        .insert({
+          group_id: teamId,
+          requester_id: user.id,
+          status: 'pending',
+        });
+
+      if (error) {
+        console.error('Error requesting to join:', error);
+        return;
+      }
+
+      // Update search results to show request sent
+      setSearchResults(searchResults.map(result => 
+        result.type === 'team' && result.id === teamId 
+          ? { ...result, has_requested: true }
+          : result
+      ));
+    } catch (error) {
+      console.error('Unexpected error requesting to join:', error);
     }
   };
 
@@ -628,78 +668,46 @@ export default function CommunityPage() {
         }}>
           Community
         </h1>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <Link
-            href="/team-invites"
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "2.5rem",
-              height: "2.5rem",
-              borderRadius: "0.5rem",
-              background: theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)",
-              border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              textDecoration: "none",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.6)" : "rgba(241, 245, 249, 0.9)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)";
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme === 'dark' ? "#e2e8f0" : "#1e293b" }}>
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </Link>
-          <Link
-            href="/inbox"
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "2.5rem",
-              height: "2.5rem",
-              borderRadius: "0.5rem",
-              background: theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)",
-              border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              textDecoration: "none",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.6)" : "rgba(241, 245, 249, 0.9)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)";
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme === 'dark' ? "#e2e8f0" : "#1e293b" }}>
-              <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-            </svg>
-            {hasUnreadInbox && (
-              <div style={{
-                position: "absolute",
-                top: "-4px",
-                right: "-4px",
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: "#ef4444",
-                border: "2px solid " + (theme === 'dark' ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)"),
-              }} />
-            )}
-          </Link>
-        </div>
+        <Link
+          href="/inbox"
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "2.5rem",
+            height: "2.5rem",
+            borderRadius: "0.5rem",
+            background: theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)",
+            border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            textDecoration: "none",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.6)" : "rgba(241, 245, 249, 0.9)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = theme === 'dark' ? "rgba(30, 41, 59, 0.4)" : "rgba(241, 245, 249, 0.7)";
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme === 'dark' ? "#e2e8f0" : "#1e293b" }}>
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+          </svg>
+          {hasUnreadInbox && (
+            <div style={{
+              position: "absolute",
+              top: "-4px",
+              right: "-4px",
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              background: "#ef4444",
+              border: "2px solid " + (theme === 'dark' ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)"),
+            }} />
+          )}
+        </Link>
       </div>
       
       {/* Main Layout with Content and Friends List */}
@@ -866,9 +874,18 @@ export default function CommunityPage() {
                         >
                           View Team
                         </Link>
+                      ) : result.has_requested ? (
+                        <div style={{
+                          ...buttonStyle,
+                          background: theme === 'dark' ? "rgba(59, 130, 246, 0.2)" : "rgba(59, 130, 246, 0.1)",
+                          color: "#3b82f6",
+                          cursor: "default",
+                        }}>
+                          Request Sent
+                        </div>
                       ) : (
                         <button 
-                          onClick={() => handleJoinTeam(result.id)}
+                          onClick={() => result.access_policy === 'open' ? handleJoinTeam(result.id) : handleRequestToJoin(result.id)}
                           style={primaryButtonStyle}
                         >
                           {result.access_policy === 'open' ? 'Join' : 'Request to Join'}

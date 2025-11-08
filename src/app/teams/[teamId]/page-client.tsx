@@ -37,12 +37,22 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null);
   const [isMember, setIsMember] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const supabase = createClientComponentClient();
   
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openMenuId) setOpenMenuId(null);
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuId]);
+
   useEffect(() => {
     const fetchTeamData = async () => {
       if (!user) {
-        setLoading(false);
+        // Don't set loading to false yet - wait for user to load
         return;
       }
 
@@ -227,10 +237,156 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
         setTeam({
           ...team,
           members: team.members.filter(m => m.id !== memberId),
+          member_count: team.member_count - 1,
         });
       }
+      setOpenMenuId(null);
     } catch (error) {
       console.error('Unexpected error removing member:', error);
+    }
+  };
+
+  // Handle promote to admin
+  const handlePromoteToAdmin = async (memberId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .update({ role: 'admin' })
+        .eq('group_id', teamId)
+        .eq('user_id', memberId);
+
+      if (error) {
+        console.error('Error promoting member:', error);
+        return;
+      }
+
+      // Refresh team data
+      if (team) {
+        setTeam({
+          ...team,
+          members: team.members.map(m => 
+            m.id === memberId ? { ...m, role: 'admin' } : m
+          ),
+        });
+      }
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error('Unexpected error promoting member:', error);
+    }
+  };
+
+  // Handle demote to member
+  const handleDemoteToMember = async (memberId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .update({ role: 'member' })
+        .eq('group_id', teamId)
+        .eq('user_id', memberId);
+
+      if (error) {
+        console.error('Error demoting admin:', error);
+        return;
+      }
+
+      // Refresh team data
+      if (team) {
+        setTeam({
+          ...team,
+          members: team.members.map(m => 
+            m.id === memberId ? { ...m, role: 'member' } : m
+          ),
+        });
+      }
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error('Unexpected error demoting admin:', error);
+    }
+  };
+
+  // Handle transfer ownership
+  const handleTransferOwnership = async (newOwnerId: string) => {
+    if (!user) return;
+
+    try {
+      // Update the group owner
+      const { error: groupError } = await supabase
+        .from('groups')
+        .update({ owner_id: newOwnerId })
+        .eq('id', teamId)
+        .eq('owner_id', user.id); // Ensure current user is the owner
+
+      if (groupError) {
+        console.error('Error updating group owner:', groupError);
+        return;
+      }
+
+      // Update new owner's role to owner
+      const { error: newOwnerError } = await supabase
+        .from('group_members')
+        .update({ role: 'owner' })
+        .eq('group_id', teamId)
+        .eq('user_id', newOwnerId);
+
+      if (newOwnerError) {
+        console.error('Error updating new owner role:', newOwnerError);
+        return;
+      }
+
+      // Update current owner's role to admin
+      const { error: currentOwnerError } = await supabase
+        .from('group_members')
+        .update({ role: 'admin' })
+        .eq('group_id', teamId)
+        .eq('user_id', user.id);
+
+      if (currentOwnerError) {
+        console.error('Error updating current owner role:', currentOwnerError);
+        return;
+      }
+
+      // Refresh team data
+      if (team) {
+        setTeam({
+          ...team,
+          owner_id: newOwnerId,
+          members: team.members.map(m => 
+            m.id === newOwnerId ? { ...m, role: 'owner' } :
+            m.id === user.id ? { ...m, role: 'admin' } : m
+          ),
+        });
+      }
+      setUserRole('admin');
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error('Unexpected error transferring ownership:', error);
+    }
+  };
+
+  // Handle delete team
+  const handleDeleteTeam = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', teamId)
+        .eq('owner_id', user.id);
+
+      if (error) {
+        console.error('Error deleting team:', error);
+        return;
+      }
+
+      // Redirect to teams page
+      window.location.href = '/teams';
+    } catch (error) {
+      console.error('Unexpected error deleting team:', error);
     }
   };
 
@@ -370,20 +526,6 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
           {/* Show different buttons based on membership */}
           {isMember ? (
             <>
-              {(userRole === 'owner' || userRole === 'admin') && (
-                <Link 
-                  href={`/teams/${teamId}/invites`} 
-                  style={primaryButtonStyle}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                  </svg>
-                  Invite Members
-                </Link>
-              )}
               {userRole === 'owner' && (
                 <Link 
                   href={`/teams/${teamId}/edit`} 
@@ -396,12 +538,51 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                   Edit Team
                 </Link>
               )}
-              <button 
-                onClick={handleLeaveTeam}
-                style={buttonStyle}
-              >
-                Leave Team
-              </button>
+              {(userRole === 'owner' || userRole === 'admin') && (
+                <>
+                  <Link 
+                    href={`/teams/${teamId}/invite`} 
+                    style={primaryButtonStyle}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    Invite
+                  </Link>
+                  <Link 
+                    href={`/teams/${teamId}/inbox`} 
+                    style={primaryButtonStyle}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                    </svg>
+                    Inbox
+                  </Link>
+                </>
+              )}
+              {userRole === 'owner' ? (
+                <button 
+                  onClick={handleDeleteTeam}
+                  style={{
+                    ...buttonStyle,
+                    background: "#ef4444",
+                    borderColor: "#ef4444",
+                  }}
+                >
+                  Delete Team
+                </button>
+              ) : (
+                <button 
+                  onClick={handleLeaveTeam}
+                  style={buttonStyle}
+                >
+                  Leave Team
+                </button>
+              )}
             </>
           ) : (
             <button style={primaryButtonStyle}>
@@ -417,10 +598,10 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
         </div>
       </div>
       
-      {/* Main Content - Two Column Layout */}
-      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-        {/* Left Column - Leaderboard */}
-        <div style={{ flex: "1 1 600px" }}>
+      {/* Main Content - Leaderboard Only */}
+      <div>
+        {/* Leaderboard */}
+        <div>
           <div style={sectionStyle}>
             <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor, marginBottom: "1.5rem" }}>
               Team Leaderboard
@@ -553,183 +734,209 @@ export default function TeamPageClient({ teamId }: { teamId: string }) {
                   <div style={{ fontWeight: 700, fontSize: "1.125rem", color: textColor, textAlign: "right" }}>
                     {member.total_commits.toLocaleString()}
                   </div>
-                  {(userRole === 'owner' || userRole === 'admin') && member.id !== user?.id && (
-                    <button
-                      onClick={() => handleRemoveMember(member.id)}
-                      style={{
-                        background: "#ef4444",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "0.375rem",
-                        padding: "0.375rem 0.75rem",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#dc2626";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "#ef4444";
-                      }}
-                    >
-                      Remove
-                    </button>
+                  {member.id !== user?.id && (
+                    <>
+                      {userRole === 'owner' ? (
+                        <div style={{ position: "relative", textAlign: "right" }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(openMenuId === member.id ? null : member.id);
+                            }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: "0.5rem",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: textColor,
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="1"></circle>
+                              <circle cx="12" cy="5" r="1"></circle>
+                              <circle cx="12" cy="19" r="1"></circle>
+                            </svg>
+                          </button>
+                          
+                          {openMenuId === member.id && (
+                            <div style={{
+                              position: "absolute",
+                              right: 0,
+                              top: "100%",
+                              marginTop: "0.25rem",
+                              background: theme === 'dark' ? "rgba(30, 41, 59, 0.95)" : "rgba(255, 255, 255, 0.95)",
+                              border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.5)" : "1px solid rgba(203, 213, 225, 0.5)",
+                              borderRadius: "0.5rem",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                              minWidth: "180px",
+                              zIndex: 50,
+                              overflow: "hidden",
+                            }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.location.href = `/profile/${member.id}`;
+                                }}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.75rem 1rem",
+                                  background: "transparent",
+                                  border: "none",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: textColor,
+                                  fontSize: "0.875rem",
+                                  transition: "background 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(241, 245, 249, 0.8)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "transparent";
+                                }}
+                              >
+                                View Profile
+                              </button>
+                              
+                              {member.role === 'member' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePromoteToAdmin(member.id);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "0.75rem 1rem",
+                                    background: "transparent",
+                                    border: "none",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                    color: textColor,
+                                    fontSize: "0.875rem",
+                                    transition: "background 0.2s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(241, 245, 249, 0.8)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "transparent";
+                                  }}
+                                >
+                                  Promote to Admin
+                                </button>
+                              )}
+                              
+                              {member.role === 'admin' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDemoteToMember(member.id);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "0.75rem 1rem",
+                                    background: "transparent",
+                                    border: "none",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                    color: textColor,
+                                    fontSize: "0.875rem",
+                                    transition: "background 0.2s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(241, 245, 249, 0.8)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "transparent";
+                                  }}
+                                >
+                                  Demote to Member
+                                </button>
+                              )}
+                              
+                              {member.role !== 'owner' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTransferOwnership(member.id);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "0.75rem 1rem",
+                                    background: "transparent",
+                                    border: "none",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                    color: textColor,
+                                    fontSize: "0.875rem",
+                                    transition: "background 0.2s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = theme === 'dark' ? "rgba(51, 65, 85, 0.5)" : "rgba(241, 245, 249, 0.8)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "transparent";
+                                  }}
+                                >
+                                  Transfer Ownership
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveMember(member.id);
+                                }}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.75rem 1rem",
+                                  background: "transparent",
+                                  border: "none",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: "#ef4444",
+                                  fontSize: "0.875rem",
+                                  transition: "background 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = theme === 'dark' ? "rgba(239, 68, 68, 0.1)" : "rgba(239, 68, 68, 0.05)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "transparent";
+                                }}
+                              >
+                                Remove Member
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <Link
+                          href={`/profile/${member.id}`}
+                          style={{
+                            background: "transparent",
+                            color: "#3b82f6",
+                            border: "1px solid #3b82f6",
+                            borderRadius: "0.5rem",
+                            padding: "0.5rem 1.5rem",
+                            fontSize: "0.875rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                            textDecoration: "none",
+                            display: "inline-block",
+                          }}
+                        >
+                          View
+                        </Link>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-        
-        {/* Right Column - Team Stats */}
-        <div style={{ flex: "1 1 400px", display: "flex", flexDirection: "column", gap: "2rem" }}>
-          {/* Team Stats */}
-          <div style={sectionStyle}>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor, marginBottom: "1.5rem" }}>
-              Team Stats
-            </h2>
-            
-            <div style={{ 
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem"
-            }}>
-              <div style={cardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Total Members</span>
-                  <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>{team.member_count}</span>
-                </div>
-              </div>
-              
-              <div style={cardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Total Commits</span>
-                  <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>
-                    {team.members.reduce((sum, m) => sum + m.total_commits, 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-              
-              {isMember && (
-                <div style={cardStyle}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: mutedColor, fontSize: "0.875rem" }}>Your Rank</span>
-                    <span style={{ fontWeight: 700, fontSize: "1.5rem", color: textColor }}>
-                      #{team.members.find(m => m.id === user?.id)?.rank || '-'}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Team Members */}
-          <div style={sectionStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: headingColor }}>
-                Team Members ({team.members.length})
-              </h2>
-            </div>
-            
-            <div style={{ 
-              display: "flex", 
-              flexDirection: "column", 
-              gap: "0.75rem",
-              maxHeight: "400px",
-              overflowY: "auto",
-            }}>
-              {/* Team Members - Show top 5 */}
-              {team.members.slice(0, 5).map((member) => (
-                <div key={member.id} style={cardStyle}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    {member.avatar_url ? (
-                      <img 
-                        src={member.avatar_url} 
-                        alt={member.username}
-                        style={{
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          borderRadius: "50%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        borderRadius: "50%",
-                        background: "linear-gradient(to bottom right, #3b82f6, #8b5cf6)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "white",
-                        fontWeight: 600,
-                        fontSize: "0.875rem",
-                      }}>
-                        {member.username.substring(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <h4 style={{ fontWeight: 600, color: textColor }}>{member.username}</h4>
-                      <div style={{ 
-                        display: "inline-flex", 
-                        alignItems: "center", 
-                        gap: "0.25rem",
-                        color: member.role === 'owner' ? "#fbbf24" : member.role === 'admin' ? "#3b82f6" : mutedColor,
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        background: member.role === 'owner' ? "rgba(251, 191, 36, 0.1)" : member.role === 'admin' ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.1)",
-                        padding: "0.125rem 0.5rem",
-                        borderRadius: "9999px",
-                        marginTop: "0.25rem",
-                      }}>
-                        {member.role === 'owner' ? (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"></path>
-                            </svg>
-                            Owner
-                          </>
-                        ) : member.role === 'admin' ? (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                              <circle cx="9" cy="7" r="4"></circle>
-                              <path d="M22 12h-4"></path>
-                              <path d="M18 8v8"></path>
-                            </svg>
-                            Admin
-                          </>
-                        ) : (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                              <circle cx="9" cy="7" r="4"></circle>
-                            </svg>
-                            Member
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              
-              {/* View All Members button if there are more than 4 */}
-              {team.members.length > 4 && (
-                <button 
-                  style={{
-                    ...buttonStyle,
-                    width: "100%",
-                    justifyContent: "center",
-                    marginTop: "0.5rem"
-                  }}
-                >
-                  View All Members ({team.members.length})
-                </button>
-              )}
             </div>
           </div>
         </div>

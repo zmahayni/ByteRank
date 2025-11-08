@@ -14,6 +14,7 @@ type TeamData = {
   description: string | null;
   avatar_url: string | null;
   owner_id: string;
+  access_policy: 'open' | 'closed';
 };
 
 export default function EditTeamPageClient({ teamId }: { teamId: string }) {
@@ -25,6 +26,7 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
   // Form state
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
+  const [accessPolicy, setAccessPolicy] = useState<'open' | 'closed'>('closed');
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
         // Fetch team data
         const { data: team, error: teamError } = await supabase
           .from('groups')
-          .select('id, name, description, avatar_url, owner_id')
+          .select('id, name, description, avatar_url, owner_id, access_policy')
           .eq('id', teamId)
           .single();
 
@@ -83,6 +85,7 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
         setTeamData(team);
         setTeamName(team.name);
         setTeamDescription(team.description || "");
+        setAccessPolicy(team.access_policy);
         setCurrentAvatarUrl(team.avatar_url);
         setLoading(false);
       } catch (err) {
@@ -234,6 +237,7 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
           name: teamName.trim(),
           description: teamDescription.trim() || null,
           avatar_url: finalAvatarUrl,
+          access_policy: accessPolicy,
         })
         .eq('id', teamId)
         .eq('owner_id', user!.id); // Double-check ownership in the query
@@ -456,6 +460,66 @@ export default function EditTeamPageClient({ teamId }: { teamId: string }) {
                 fontFamily: "inherit",
               }}
             />
+          </div>
+
+          {/* Access Policy */}
+          <div style={{ marginBottom: "2rem" }}>
+            <label style={{
+              display: "block",
+              marginBottom: "0.75rem",
+              fontWeight: 600,
+              color: textColor,
+            }}>
+              Team Access
+            </label>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <button
+                type="button"
+                onClick={() => setAccessPolicy('open')}
+                style={{
+                  flex: 1,
+                  padding: "1rem",
+                  borderRadius: "0.5rem",
+                  border: accessPolicy === 'open' 
+                    ? "2px solid #3b82f6" 
+                    : theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid #cbd5e1",
+                  background: accessPolicy === 'open'
+                    ? theme === 'dark' ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.05)"
+                    : theme === 'dark' ? "rgba(15, 23, 42, 0.3)" : "#f9fafb",
+                  color: theme === 'dark' ? "white" : "#1e293b",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Open</div>
+                <div style={{ fontSize: "0.75rem", color: theme === 'dark' ? "#94a3b8" : "#64748b" }}>
+                  Anyone can join directly
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessPolicy('closed')}
+                style={{
+                  flex: 1,
+                  padding: "1rem",
+                  borderRadius: "0.5rem",
+                  border: accessPolicy === 'closed' 
+                    ? "2px solid #3b82f6" 
+                    : theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid #cbd5e1",
+                  background: accessPolicy === 'closed'
+                    ? theme === 'dark' ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.05)"
+                    : theme === 'dark' ? "rgba(15, 23, 42, 0.3)" : "#f9fafb",
+                  color: theme === 'dark' ? "white" : "#1e293b",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Closed</div>
+                <div style={{ fontSize: "0.75rem", color: theme === 'dark' ? "#94a3b8" : "#64748b" }}>
+                  Requires approval or invite
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Avatar Upload */}

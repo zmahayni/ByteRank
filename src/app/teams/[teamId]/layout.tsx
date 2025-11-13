@@ -7,8 +7,11 @@ export default async function TeamLayout({
   params,
 }: {
   children: ReactNode;
-  params: { teamId: string };
+  params: Promise<{ teamId: string }>;
 }) {
+  // Await params in Next.js 15+
+  const { teamId } = await params;
+  
   return (
     <section>
       {/* Page content */}

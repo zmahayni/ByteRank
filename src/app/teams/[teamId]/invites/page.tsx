@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import InvitesPageClient from "./page-client";
 
-export default function InvitesPage({ params }: { params: { teamId: string } }) {
-  return <InvitesPageClient teamId={params.teamId} />;
+export default async function InvitesPage({ params }: { params: Promise<{ teamId: string }> }) {
+  const { teamId } = await params;
+  return <InvitesPageClient teamId={teamId} />;
 }

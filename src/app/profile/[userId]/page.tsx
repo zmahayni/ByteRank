@@ -373,36 +373,12 @@ export default function PublicProfilePage({ params }: { params: Promise<{ userId
               </h2>
 
               <div style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
+                padding: "2rem",
+                textAlign: "center",
+                color: labelColor,
+                fontStyle: "italic",
               }}>
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "1rem",
-                  background: theme === 'dark' ? "rgba(30, 41, 59, 0.3)" : "rgba(241, 245, 249, 0.7)",
-                  borderRadius: "0.375rem",
-                  border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
-                }}>
-                  <span style={{ color: labelColor, fontSize: "0.875rem" }}>Total Contributions</span>
-                  <span style={{ fontSize: "1.5rem", fontWeight: 700, color: "#60a5fa" }}>
-                    {profileData.num_contributions || 0}
-                  </span>
-                </div>
-
-                <div style={{
-                  padding: "1rem",
-                  background: theme === 'dark' ? "rgba(30, 41, 59, 0.3)" : "rgba(241, 245, 249, 0.7)",
-                  borderRadius: "0.375rem",
-                  border: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)",
-                }}>
-                  <div style={{ color: labelColor, fontSize: "0.875rem", marginBottom: "0.25rem" }}>Member Since</div>
-                  <div style={{ color: headingColor, fontWeight: 500 }}>
-                    {new Date(profileData.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  </div>
-                </div>
+                Have not decided what to put here yet
               </div>
             </div>
           </div>

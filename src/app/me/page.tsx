@@ -444,21 +444,13 @@ export default function ProfilePage() {
               Your Stats
             </h2>
             
-            <div style={statItemStyle}>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#60a5fa" }}>{userData.contributions}</div>
-              <div style={{ fontSize: "0.75rem", color: labelColor }}>Total Contributions</div>
-            </div>
-            
-            <div style={{ 
-              fontSize: "0.875rem", 
-              color: labelColor, 
+            <div style={{
+              padding: "2rem",
               textAlign: "center",
-              marginTop: "1rem",
-              paddingTop: "1rem",
-              borderTop: theme === 'dark' ? "1px solid rgba(51, 65, 85, 0.3)" : "1px solid rgba(203, 213, 225, 0.5)"
+              color: labelColor,
+              fontStyle: "italic",
             }}>
-              <div style={{ marginBottom: "0.25rem", fontWeight: 500 }}>Member Since</div>
-              <div style={{ color: headingColor }}>{userData.joined}</div>
+              Have not decided what to put here yet
             </div>
           </div>
         </div>

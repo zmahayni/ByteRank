@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTheme } from "../../components/ThemeProvider";
 import PageLayout from "../../components/PageLayout";
 
-export default function WhatsNewPage() {
+export default function DevNotesPage() {
   const { theme } = useTheme();
 
   const headingColor = theme === 'dark' ? "#e2e8f0" : "#1e293b";
@@ -45,10 +45,10 @@ export default function WhatsNewPage() {
             ← Back
           </Link>
           <h1 className="gradient-text" style={{ fontSize: "2.5rem", fontWeight: "bold", marginBottom: "0.5rem" }}>
-            What's New
+            Dev Notes
           </h1>
           <p style={{ color: mutedColor, fontSize: "0.875rem" }}>
-            November 7, 2025
+            November 13, 2025
           </p>
         </div>
 
@@ -56,10 +56,16 @@ export default function WhatsNewPage() {
         <div style={cardStyle}>
           <div style={{ lineHeight: "1.8", color: textColor }}>
             <p style={{ marginBottom: "1.5rem" }}>
-              This is v1/beta version of ByteRank. I'm aware there are probably a lot of bugs since this is my first time building an actual production project, so bear with me. Please go to the feedback section and honestly say whatever you want, whether its slight UI/UX stuff you wanna see, big features, bugs, etc.
+              This is currently a beta/v1 version of ByteRank. I wanted to ship something out, and I'll work out a bunch of bugs/optimizations as time allows the next couple weeks/months.
+            </p>
+            <p style={{ marginBottom: "1.5rem" }}>
+              I appreciate any feedback, whether it's a bug or just a feature you'd like to see!
+            </p>
+            <p style={{ marginBottom: "1.5rem" }}>
+              For now, I just count the number of commits in the last 100 events that gets updated at midnight (CST) everyday using a cron job. I plan to make the scoring use other stuff, like lines-added, files updated, etc. (I'm still deciding exactly how I should score things, please feel free to email me your recommendations). I'll also implement webhooks and making a GitHub app to enable real-time syncing instead of running the cron-job.
             </p>
             <p>
-              I'll be consistently working on this as time allows me, really excited to iterate on this project and improve it!!
+              Thank you for reading!
             </p>
           </div>
 
